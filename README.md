@@ -34,16 +34,16 @@ No cloud. No tracking. Everything stays on the device.
 
 ## 📂 Project Structure
 app/
-├── src/main/kotlin/ # App source code (screens, viewmodels, db)
-├── src/main/res/ # Resources (UI, icons, strings)
-├── src/main/assets/ # Bundled data (SQLite seed, images)
-└── mainverte.db # Local database (created at first run)
+|- src/main/kotlin/ # App source code (screens, viewmodels, db)
+|- src/main/res/ # Resources (UI, icons, strings)
+|- src/main/assets/ # Bundled data (SQLite seed, images)
+|- mainverte.db # Local database (created at first run)
 
 documentation/
-└── ... # App specs, data model, developer docs
+|- ... # App specs, data model, developer docs
 
 database/
-└── ... # SQL schema, migrations, seed scripts
+|- ... # SQL schema, migrations, seed scripts
 
 ---
 
