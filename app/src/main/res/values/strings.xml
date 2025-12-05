@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">MainVerte</string>
+    <string name="bar_search">Search…</string>
+    <string name="bar_collection">Collection</string>
+    <string name="bar_species">Species</string>
+    <string name="bar_history">History</string>
+    <string name="species_title">Species</string>
+    <string name="settings_title">Settings</string>
+    <string name="collection_title">Collection</string>
+    <string name="species_not_found">No species found</string>
+    <string name="specimen_title">Specimen</string>
+    <string name="specimen_name">Specimen name</string>
+    <string name="specimen_scientific_name">Scientific name</string>
+    <string name="specimen_scientific_name_error">Should be exact or empty</string>
+    <string name="specimen_take_photo">Take photo</string>
+    <string name="specimen_delete_photo">Delete photo</string>
+    <string name="specimen_watering_unknown">Unknown</string>
+    <string name="specimen_last_watering_icon">Watering</string>
+    <string name="specimen_last_watering">Last watering</string>
+    <string name="specimen_watering_today">Today</string>
+    <string name="specimen_days">days</string>
+</resources>

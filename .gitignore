@@ -1,0 +1,36 @@
+# ------------------------------
+# ANDROID STUDIO / INTELLIJ
+# ------------------------------
+.idea/*
+!.idea/codeStyles/
+!.idea/runConfigurations/
+
+*.iml
+
+# ------------------------------
+# GRADLE
+# ------------------------------
+.gradle/
+build/
+app/build/
+
+# ------------------------------
+# LOCAL CONFIG
+# ------------------------------
+local.properties
+
+# ------------------------------
+# NATIVE BUILD
+# ------------------------------
+.externalNativeBuild/
+.cxx/
+
+# ------------------------------
+# MISC
+# ------------------------------
+.DS_Store
+captures/
+/.kotlin/
+
+database/wcvp.zip
+app/src/main/assets/db/mainverte.db

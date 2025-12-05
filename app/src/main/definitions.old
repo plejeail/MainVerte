@@ -1,0 +1,217 @@
+
+/*
+///** State of a specimen or associated journal. */
+//enum class EntityStatus
+//{
+//    Active,    // Active specimen in user collection.
+//    Cemetery,  // Retired specimen; no alerts, no new journals.
+//    Archived,  // Hidden specimen; in queue for deletion, still restorable.
+//}
+//
+///** Broad environment / microclimate. */
+//enum class Environment
+//{
+//    Any,         // Generalist species tolerating multiple environments.
+//    Indoor,      // Protected from weather, stable temperature.
+//    Outdoor,     // Exposed to ambient weather.
+//    Greenhouse,  // Controlled greenhouse/glasshouse environment.
+//    Terrarium,   // Enclosed humid microclimate.
+//}
+//
+///** Light availability. */
+//enum class LightExposure
+//{
+//    Sun,           // Full sun: typically ≥ 6 hours of direct sunlight per day.
+//    PartialShade,  // Partial shade: 2–6 hours direct sun or bright indirect/dappled light.
+//    Shade,         // Full shade: typically &lt; 2 hours direct sun; predominantly indirect/low light.
+//}
+//
+///** Data creator. */
+//enum class Origin
+//{
+//    System, // Auto-generated or app data.
+//    User,   // Gardener custom content.
+//}
+//
+///** Severity level used for alerts and events (None < Warning < Danger). */
+//enum class AlertLevel
+//{
+//    None,     // No abnormal condition detected.
+//    Warning,  // Early indicator; attention recommended.
+//    Danger,   // Critical state; action is required promptly.
+//}
+//
+///** Broad care-oriented classification used to simplify UI filtering and provide heuristics. */
+//enum class PlantType
+//{
+//    Other,              // Catch-all type.
+//    Adaptable,          // Generalist tolerant plants; forgiving care profile.
+//    Tropical,           // Tropical foliage species; elevated humidity, warm temps, filtered light and regular feeding.
+//    Cactus,             // Desert cacti; intense light, sparse watering.
+//    Carnivorous,        // Carnivorous plants; nutrient-poor, pure water, higher humidity.
+//    Citrus,             // Citrus shrubs/trees; high light, fertilization.
+//    Conifer,            // Coniferous species; outdoor hardy, require good drainage and seasonal adaptation.
+//    Epiphyte,           // Epiphytes (air plants); minimal/airy substrate, frequent light misting cycles.
+//    Fern,               // Ferns; filtered light or shade, even moisture, consistent ambient humidity.
+//    HardyOutdoor,       // Hardy outdoor ornamentals; tolerate frost and variable conditions.
+//    KitchenGarden,      // Kitchen garden herbs/vegetables; edible use.
+//    Mediterranean,      // Mediterranean climate species; bright light, dry summer rest.
+//    Orchid,             // Orchids; airy mix, humidity management, genus-specific wet/dry cycles.
+//    Palm,               // Palms; prefer bright indirect light, moderate watering, avoid mineral salt buildup.
+//    SeasonalFlowering,  // Seasonal flowering plants needing rest/dormancy management to encourage bloom cycles.
+//    Succulent,          // Non-cactus succulents storing water in leaves/stems; bright light, sparse watering.
+//}
+//
+///** Category of care advice used for filtering and display. */
+//enum class AdviceCategory
+//{
+//    General,        // General advice, not specific to a category.
+//    Watering,       // Watering instructions.
+//    Fertilization,  // Fertilization instructions.
+//    Light,          // Light advice.
+//    Humidity,       // Humidity management (e.g., misting, humidifier).
+//    Temperature,    // Temperature management (min/max).
+//    Pruning,        // Pruning or trimming guidance.
+//    Repotting,      // Repotting advice.
+//    Soil,           // Soil composition and recommendations.
+//    Propagation,    // Propagation methods (cuttings, division, seeds).
+//    Cleaning,       // Cleaning advice (e.g., wiping leaves).
+//    PestControl,    // Pest and disease management.
+//    Flowering,      // Flowering care (encouraging or maintaining blooms).
+//    RestPeriod,     // Rest/dormancy period management.
+//    Support,        // Structural support (tutors, bonsai wiring, climbing support).
+//    Harvest,        // Harvesting tips (for citrus, herbs, edible plants).
+//    SpecialCare,    // Special or unique care requirements.
+//}
+//
+///** Types of care measurements / metrics on which alerts can be generated. */
+//enum class CareMetric
+//{
+//    Watering,     // Days between watering (scheduler).
+//    Fertilizer,   // Days between fertilizer applications.
+//    LightMin,     // Minimal DLI (Daily Light Integral).
+//    LightMax,     // Maximal DLI (Daily Light Integral).
+//    TempMin,      // Minimal temperature.
+//    TempMax,      // Maximal temperature.
+//    HumidityMin,  // Minimal relative humidity (%).
+//    HumidityMax,  // Maximal relative humidity (%).
+//    Rotation,     // Days between rotations.
+//    Repotting,    // Days before repotting.
+//}
+//
+///** Kind of event recorded in a journal or generated by the system. */
+//enum class EventKind
+//{
+//    Generic,    // Generic user note or observation.
+//    Care,       // User-performed care activity (watering, fertilizing, pruning, etc.).
+//    Lifecycle,  // Biological lifecycle event (acquisition, propagation, flowering, death).
+//    Meta,       // Metadata change (profile or settings update).
+//    Triggered,  // System-generated event (usually created by an alert). Severity is in event.alert_level.
+//}
+//
+///** Direction of alert evaluation (whether values trigger when above or below thresholds). */
+//enum class AlertOrder
+//{
+//    LowerThan,  // Alert triggers when measured value falls below thresholds (e.g., temperature too low).
+//    UpperThan,  // Alert triggers when measured value rises above thresholds (e.g., temperature too high).
+//}
+//
+//class Event(
+//    val id               : Int,
+//    val journalId        : Int,
+//    val kind             : EventKind,
+//    val alertLevel       : AlertLevel,
+//    val photoUri         : Uri?,
+//    val floatValue1      : Double?,
+//    val floatValue2      : Double?,
+//    val textValue        : String?,
+//    val creationDate     : Instant,
+//    val modificationDate : Instant,
+//)
+//
+//class Journal(
+//    val title       : String,
+//    val tag         : String,
+//    val description : String,
+//    val photoUri    : Uri?,
+//    val creator     : Origin,
+//    val status      : EntityStatus,
+//    val events      : List<Event> = emptyList()
+//)
+//
+///** Threshold pair for warning/danger levels with evaluation logic. */
+//class Alert(
+//    /** Threshold for warning-level alert (less severe). */
+//    val warning   : Int,
+//    /** Threshold for danger-level alert (more severe). */
+//    val danger    : Int,
+//    /** Care metric this alert monitors. */
+//    val metric    : CareMetric,
+//    /** Direction of alert evaluation (above or below threshold). */
+//    val order     : AlertOrder,
+//    /** Generator used to generate events on trigger. */
+//    val generator : Event,
+//) {
+//    init {
+//        expect {
+//               (order == AlertOrder.UpperThan && warning <= danger)
+//            || (order == AlertOrder.LowerThan && warning >= danger)
+//        }
+//    }
+//
+//    /** Evaluate measured value against thresholds and return severity level. */
+//    fun evaluate(measure: Int): AlertLevel {
+//        return if (order == AlertOrder.LowerThan) {
+//            if      (measure > warning) { AlertLevel.None    }
+//            else if (measure > danger)  { AlertLevel.Warning }
+//            else                        { AlertLevel.Danger  }
+//        } else { // Upper Than
+//            if      (measure < warning) { AlertLevel.None    }
+//            else if (measure < danger)  { AlertLevel.Warning }
+//            else                        { AlertLevel.Danger  }
+//        }
+//    }
+//}
+//
+//class MonthlyAlert(
+//    val warningList      : IntArray,
+//    val dangerList       : IntArray,
+//    val metric           : CareMetric,
+//    val order            : AlertOrder,
+//) {
+//    init {
+//        expect { dangerList.size == 12 }
+//        expect { warningList.size == 12 }
+//        for (i in 0 until 12) {
+//            if (order == AlertOrder.UpperThan) {
+//                expect { warningList[i] <= dangerList[i] }
+//            } else {
+//                expect { warningList[i] >= dangerList[i] }
+//            }
+//        }
+//    }
+//
+//    fun evaluate(date: Calendar, measure: Int): AlertLevel {
+//        val month   = date.get(Calendar.MONTH)
+//        val warning = warningList[month]
+//        val danger  = dangerList[month]
+//
+//        return if (order == AlertOrder.LowerThan) {
+//            if      (measure > warning) { AlertLevel.None    }
+//            else if (measure > danger)  { AlertLevel.Warning }
+//            else                        { AlertLevel.Danger  }
+//        } else { // Upper Than
+//            if      (measure < warning) { AlertLevel.None    }
+//            else if (measure < danger)  { AlertLevel.Warning }
+//            else                        { AlertLevel.Danger  }
+//        }
+//    }
+//}
+//
+//class Species(
+//    val scientificName: String,
+//    val photoUri: String,
+//    val geographicArea: String,
+//    val lifeformDescription: String,
+//)
+*/
