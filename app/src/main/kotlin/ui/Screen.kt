@@ -53,7 +53,6 @@ sealed interface IScreen {
 class Navigator(initial: IScreen) {
     private val _backstack = mutableStateListOf(initial)
     var searchString  by mutableStateOf("")
-    var searchVersion by mutableIntStateOf(0)
 
     /** Whether the navigator has a previous screen or not. */
     fun canGoBack(): Boolean { return _backstack.size > 1 }
@@ -64,14 +63,12 @@ class Navigator(initial: IScreen) {
     /** Replace current screen. */
     fun replace(s: IScreen) {
         searchString = ""
-        ++searchVersion
         _backstack[_backstack.lastIndex] = s
     }
 
     /** Add a new current screen. */
     fun push(s: IScreen) {
         searchString = ""
-        ++searchVersion
         _backstack += s
     }
 
@@ -79,8 +76,51 @@ class Navigator(initial: IScreen) {
     fun pop() {
         if (canGoBack()) {
             searchString = ""
-            ++searchVersion
             _backstack.removeAt(_backstack.lastIndex)
         }
+    }
+
+    /** Return the backstack as a list of simple class names for saving. */
+    fun backstackNames(): List<String> = _backstack.map { it.javaClass.simpleName }
+}
+
+/** Helpers to save/restore Navigator via rememberSaveable. */
+fun navigatorSaver(): androidx.compose.runtime.saveable.Saver<Navigator, *> {
+    return androidx.compose.runtime.saveable.Saver(
+        save = { nav ->
+            // Save the backstack as a list of screen ids and the search string
+            val names = nav.backstackNames()
+            listOf(names, nav.searchString)
+        },
+        restore = { state ->
+            try {
+                @Suppress("UNCHECKED_CAST")
+                val pair = state as List<Any>
+                val names = pair[0] as List<String>
+                val search = pair[1] as String
+                val first = resolveScreenByName(names.firstOrNull() ?: "SpecimenGridScreen")
+                val nav = Navigator(first)
+                nav.searchString = search
+                // push remaining screens (if any)
+                for (i in 1 until names.size) {
+                    resolveScreenByName(names[i])?.let { nav.push(it) }
+                }
+                nav
+            } catch (e: Throwable) {
+                Navigator(resolveScreenByName("SpecimenGridScreen")!!)
+            }
+        }
+    )
+}
+
+
+
+/** Resolve a screen singleton from its simple class name. */
+fun resolveScreenByName(name: String): IScreen? {
+    return when (name) {
+        "SpecimenGridScreen" -> com.plej.mainverte.ui.SpecimenGridScreen
+        "SpeciesGridScreen"  -> com.plej.mainverte.ui.SpeciesGridScreen
+        "SettingsScreen"     -> com.plej.mainverte.ui.SettingsScreen
+        else -> null
     }
 }

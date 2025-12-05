@@ -16,6 +16,8 @@ data class PagedState<T>(
     val endReached: Boolean = false
 )
 
+data class Query(val sql: String, val args: Array<String>)
+
 abstract class PagedViewModel<T>(
     private val pageSize: Int = 150
 ) : ViewModel() {
@@ -31,9 +33,6 @@ abstract class PagedViewModel<T>(
 
     fun updateSearch(search: String) {
         searched = search
-            .replace("'", "''")
-            .replace("%", "\\%")
-            .replace("_", "\\_")
 
         currentOffset = 0
 
@@ -46,7 +45,7 @@ abstract class PagedViewModel<T>(
         loadNextPage()
     }
 
-    protected abstract fun buildQuery(search: String): String
+    protected abstract fun buildQuery(search: String): Query
     protected abstract fun parseResult(cursor: Cursor): ArrayList<T>
 
     fun loadNextPage() {
@@ -61,10 +60,11 @@ abstract class PagedViewModel<T>(
 
             _state.value = current.copy(isLoading = true)
 
-            val query = buildQuery(searchSnapshot) + " LIMIT $pageSize OFFSET $currentOffset;"
+            val queryObj = buildQuery(searchSnapshot)
+            val finalSql = queryObj.sql + " LIMIT $pageSize OFFSET $currentOffset;"
 
             val page = DbExecutor.query { db ->
-                val cursor = db.rawQuery(query, emptyArray())
+                val cursor = db.rawQuery(finalSql, queryObj.args)
                 cursor.use { parseResult(it) }
             }
 
@@ -85,24 +85,28 @@ abstract class PagedViewModel<T>(
 }
 
 class SpecimenViewModel : PagedViewModel<Specimen>() {
-    override fun buildQuery(search: String): String {
+    override fun buildQuery(search: String): Query {
         var query = """
             SELECT
                 specimen.id              AS specimen_id,
                 specimen.name            AS specimen_name,
                 specimen.photo_uri       AS specimen_photo,
                 specimen.last_watering_at AS specimen_watering_at,
+                specimen.last_turning_at AS specimen_last_turning_at,
                 species.family           AS species_family,
                 species.genus            AS species_genus,
                 species.name             AS species_species
             FROM specimen LEFT JOIN species ON specimen.species_id = species.id
         """.trimIndent()
+        
+        val args = ArrayList<String>()
         if (search.isNotEmpty()) {
-            query += " WHERE specimen_name LIKE '%${search}%'"
+            query += " WHERE specimen_name LIKE ?"
+            args.add("%$search%")
         }
 
         query += " ORDER BY last_update"
-        return query
+        return Query(query, args.toTypedArray())
     }
 
     override fun parseResult(cursor: Cursor): ArrayList<Specimen> {
@@ -111,6 +115,7 @@ class SpecimenViewModel : PagedViewModel<Specimen>() {
         val idxName     = cursor.getColumnIndexOrThrow("specimen_name")
         val idxPhoto    = cursor.getColumnIndexOrThrow("specimen_photo")
         val idxWatering = cursor.getColumnIndexOrThrow("specimen_watering_at")
+        val idxTurning  = cursor.getColumnIndexOrThrow("specimen_last_turning_at")
         val idxFamily   = cursor.getColumnIndexOrThrow("species_family")
         val idxGenus    = cursor.getColumnIndexOrThrow("species_genus")
         val idxSpecies  = cursor.getColumnIndexOrThrow("species_species")
@@ -123,7 +128,8 @@ class SpecimenViewModel : PagedViewModel<Specimen>() {
             val genus    = cursor.getStringOrNull(idxGenus)   ?: ""
             val species  = cursor.getStringOrNull(idxSpecies) ?: ""
             val watering = cursor.getLongOrNull(idxWatering)
-            out.add(Specimen(id, name, photoUri, family, genus, species, watering))
+            val turning  = cursor.getLongOrNull(idxTurning)
+            out.add(Specimen(id, name, photoUri, family, genus, species, watering, turning))
         }
 
         return out
@@ -142,14 +148,16 @@ data class SpeciesRow(
 }
 
 class SpeciesViewModel : PagedViewModel<SpeciesRow>() {
-    override fun buildQuery(search: String): String {
+    override fun buildQuery(search: String): Query {
         var query = "SELECT id, family, genus, name FROM species"
+        val args = ArrayList<String>()
         if (search.isNotEmpty()) {
-            query += " WHERE slug LIKE '%${search}%'"
+            query += " WHERE slug LIKE ?"
+            args.add("%$search%")
         }
 
         query += " ORDER BY slug"
-        return query
+        return Query(query, args.toTypedArray())
     }
 
     override fun parseResult(cursor: Cursor): ArrayList<SpeciesRow> {

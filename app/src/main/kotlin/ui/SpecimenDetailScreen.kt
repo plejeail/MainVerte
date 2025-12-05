@@ -83,30 +83,22 @@ import kotlin.collections.find
 import kotlin.collections.isNotEmpty
 import kotlinx.coroutines.withContext
 
-data object SpecimenDetailScreen : IScreen {
+class SpecimenDetailScreen(val specimen: Specimen) : IScreen {
     override val isSearchable  = false
     override val hasSettings   = false
     override val bottomBarMode = BottomBarMode.Confirm
     override val title         = R.string.specimen_title
 
-    var initialPhotoUri: String? = null
-
-    var currentSpecimen: Specimen = Specimen(-1, "", null, "", "", "", null)
-        private set
-
-    fun setSpecimen(specimen: Specimen) {
-        currentSpecimen = specimen
-        initialPhotoUri = currentSpecimen.photoUri
-    }
+    private val initialPhotoUri: String? = specimen.photoUri
 
     @Composable
     override fun Draw(navigator: Navigator) {
-        SpecimenDetailContent(currentSpecimen)
+        SpecimenDetailContent(specimen)
     }
 
     override fun onCancel(navigator: Navigator) {
-        if (initialPhotoUri != currentSpecimen.photoUri) {
-            deleteSpecimenPhoto(MainVerteApp.App, currentSpecimen.photoUri)
+        if (initialPhotoUri != specimen.photoUri) {
+            deleteSpecimenPhoto(MainVerteApp.App, specimen.photoUri)
         }
 
         navigator.pop()
@@ -115,13 +107,13 @@ data object SpecimenDetailScreen : IScreen {
     override suspend fun onDelete(navigator: Navigator) {
         DbExecutor.write { db ->
             val stmt = db.compileStatement("DELETE FROM specimen WHERE id = ?")
-            stmt.bindInt(1, currentSpecimen.id)
+            stmt.bindInt(1, specimen.id)
             stmt.executeUpdateDelete()
         }
 
         val context = MainVerteApp.App
-        if (photoExists(context, currentSpecimen.photoUri)) {
-            deleteSpecimenPhoto(context, currentSpecimen.photoUri)
+        if (photoExists(context, specimen.photoUri)) {
+            deleteSpecimenPhoto(context, specimen.photoUri)
         }
 
         if (photoExists(context, initialPhotoUri)) {
@@ -157,22 +149,22 @@ data object SpecimenDetailScreen : IScreen {
                 """.trimIndent()
             )
 
-            if (currentSpecimen.id > -1) {
-                stmt.bindInt(1, currentSpecimen.id)
+            if (specimen.id > -1) {
+                stmt.bindInt(1, specimen.id)
             } else {
                 stmt.bindNull(1)
             }
 
-            stmt.bindString(2, currentSpecimen.name)
-            stmt.bindNullableString(3, currentSpecimen.photoUri)
-            stmt.bindString(4, currentSpecimen.family)
-            stmt.bindString(5, currentSpecimen.genus)
-            stmt.bindString(6, currentSpecimen.species)
-            Logger.i { "${currentSpecimen.family} ${currentSpecimen.genus} ${currentSpecimen.species}" }
+            stmt.bindString(2, specimen.name)
+            stmt.bindNullableString(3, specimen.photoUri)
+            stmt.bindString(4, specimen.family)
+            stmt.bindString(5, specimen.genus)
+            stmt.bindString(6, specimen.species)
+            Logger.i { "${specimen.family} ${specimen.genus} ${specimen.species}" }
             stmt.executeInsert()
         }}
 
-        if (initialPhotoUri != currentSpecimen.photoUri) {
+        if (initialPhotoUri != specimen.photoUri) {
             if (photoExists(MainVerteApp.App, initialPhotoUri)) {
                 deleteSpecimenPhoto(MainVerteApp.App, initialPhotoUri)
             }
@@ -182,7 +174,7 @@ data object SpecimenDetailScreen : IScreen {
     }
 
     override fun isDeletable(): Boolean {
-        return currentSpecimen.id > -1
+        return specimen.id > -1
     }
 
     @Composable
@@ -210,13 +202,35 @@ data object SpecimenDetailScreen : IScreen {
 
         val suggestions: List<SpeciesRow> = speciesState.items.take(6)
         val isSpeciesValid = speciesField.text.isBlank() || speciesState.items.any {
-            it.scientificName() == speciesField.text
+            it.scientificName().equals(speciesField.text, ignoreCase = true)
+        }
+
+        LaunchedEffect(speciesField.text, speciesState.items) {
+            if (speciesField.text.isBlank()) {
+                specimen.family = ""
+                specimen.genus = ""
+                specimen.species = ""
+            } else {
+                val match = speciesState.items.find {
+                    it.scientificName().equals(speciesField.text, ignoreCase = true)
+                }
+                if (match != null) {
+                    specimen.family = match.family
+                    specimen.genus = match.genus
+                    specimen.species = match.name
+                } else {
+                    specimen.family = ""
+                    specimen.genus = ""
+                    specimen.species = ""
+                }
+            }
         }
 
         for (s in speciesState.items) {
             Logger.i { "${s.scientificName()} vs ${speciesField.text}" }
         }
         var lastWateringAt by rememberSaveable { mutableStateOf(specimen.lastWateringAt) }
+        var lastTurningAt  by rememberSaveable { mutableStateOf(specimen.lastTurningAt)  }
 
         Column(
             modifier = Modifier
@@ -235,7 +249,6 @@ data object SpecimenDetailScreen : IScreen {
                     }
 
                     specimen.photoUri = newUri
-                    currentSpecimen.photoUri = newUri
                 },
                 onPhotoDeleted = {
                     photoUri = null
@@ -244,7 +257,6 @@ data object SpecimenDetailScreen : IScreen {
                     }
 
                     specimen.photoUri = null
-                    currentSpecimen.photoUri = null
                 },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -269,7 +281,7 @@ data object SpecimenDetailScreen : IScreen {
                 onValueChange = {
                     speciesField = it
                     val species = suggestions.find { it2 ->
-                        it2.scientificName() == it.text
+                        it2.scientificName().equals(it.text, ignoreCase = true)
                     }
 
                     if (species != null) {
@@ -302,12 +314,24 @@ data object SpecimenDetailScreen : IScreen {
 
             Spacer(Modifier.height(16.dp))
 
-            WateringField(
-                lastWateringAt = lastWateringAt,
+            DateField(
+                dateAt = lastWateringAt,
+                imageIcon = Icons.Default.InvertColors,
                 onChange = { newValue ->
                     lastWateringAt = newValue
                     specimen.lastWateringAt = newValue
                     currentSpecimen.lastWateringAt = newValue
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            DateField(
+                dateAt = lastTurningAt,
+                imageIcon = Icons.Default.InvertColors,
+                onChange = { newValue ->
+                    lastTurningAt = newValue
+                    specimen.lastTurningAt = newValue
+                    currentSpecimen.lastTurningAt = newValue
                 },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -526,8 +550,9 @@ private fun createSpecimenPhotoFile(context: Context, specimenName: String): Pai
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun WateringField(
-    lastWateringAt: Long?,
+private fun DateField(
+    dateAt: Long?,
+    iconImage: ImageVector,
     onChange: (Long?) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -538,7 +563,7 @@ private fun WateringField(
     var showDatePicker by remember { mutableStateOf(false) }
 
     val datePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = lastWateringAt ?: System.currentTimeMillis()
+        initialSelectedDateMillis = dateAt ?: System.currentTimeMillis()
     )
 
     if (showDatePicker) {
@@ -567,14 +592,14 @@ private fun WateringField(
         }
     }
 
-    val text = if (lastWateringAt == null) {
+    val text = if (dateAt == null) {
         stringResource(R.string.specimen_watering_unknown)
     } else {
-        val date = Date(lastWateringAt)
+        val date = Date(dateAt)
 
         val now = System.currentTimeMillis()
         val millisPerDay = 24L * 60L * 60L * 1000L
-        val days = (now - lastWateringAt) / millisPerDay
+        val days = (now - dateAt) / millisPerDay
         val daysLabel = stringResource(R.string.specimen_days)
         "${dateFormatter.format(date)} ($days $daysLabel)"
     }
@@ -585,8 +610,8 @@ private fun WateringField(
         horizontalArrangement = Arrangement.Start
     ) {
         Icon(
-            imageVector = Icons.Default.InvertColors,
-            contentDescription = stringResource(R.string.specimen_last_watering_icon),
+            imageVector = iconImage,
+            contentDescription = "icon",
             modifier = Modifier.size(24.dp)
         )
 

@@ -82,4 +82,5 @@ class Specimen (
     var family   : String,
     var genus    : String,
     var lastWateringAt: Long?,
+    var lastTurningAt : Long?,
 )

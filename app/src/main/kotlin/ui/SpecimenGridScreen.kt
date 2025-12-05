@@ -57,12 +57,10 @@ data object SpecimenGridScreen : IScreen {
     override fun Draw(navigator: Navigator) {
         DrawCollectionGrid(navigator.searchString,
            onItemClick = { row ->
-                SpecimenDetailScreen.setSpecimen(row)
-                navigator.push(SpecimenDetailScreen)
+                navigator.push(SpecimenDetailScreen(row))
            },
            onAddClick  = {
-                SpecimenDetailScreen.setSpecimen(Specimen(-1, "", null, "", "", "", null))
-                navigator.push(SpecimenDetailScreen)
+                navigator.push(SpecimenDetailScreen(Specimen(-1, "", null, "", "", "", null)))
            }
         )
     }

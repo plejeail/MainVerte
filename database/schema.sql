@@ -83,5 +83,6 @@ CREATE TABLE specimen (
     species_id        INTEGER REFERENCES species(id) ON DELETE SET NULL,
     date_acquisition  INTEGER,
     last_update       INTEGER,
-    last_watering_at  INTEGER
+    last_watering_at  INTEGER,
+    last_turning_at   INTEGER
 ) STRICT;

@@ -60,7 +60,6 @@ class MainVerteDbHelper private constructor(
             val appCtx = context.applicationContext
             ensurePrepopulatedDatabase(appCtx, DB_NAME, DB_ASSET)
             singleton = MainVerteDbHelper(appCtx, DB_NAME, DB_VERSION)
-            singleton!!.triggerUpdate()
 
             return singleton!!
         }

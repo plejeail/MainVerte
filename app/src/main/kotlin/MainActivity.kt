@@ -60,32 +60,30 @@ import com.plej.mainverte.utilities.measureTime
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
-    val navigator = Navigator(SpecimenGridScreen)
-    lateinit var db: SQLiteDatabase
-
     override fun onDestroy() {
-        if (::db.isInitialized && db.isOpen) {
-            db.close()
-        }
-
         super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-    measureTime("activity creation") {
-        super.onCreate(savedInstanceState)
-        val dbHelper = MainVerteDbHelper.initialize(this)
-        dbHelper.triggerUpdate()
-        db = dbHelper.readableDatabase
+        measureTime("activity creation") {
+            super.onCreate(savedInstanceState)
+            val dbHelper = MainVerteDbHelper.initialize(this)
+            dbHelper.triggerUpdate()
 
-        enableEdgeToEdge()
-        setContent { DrawFullScreen(navigator) }
-    }}
+            enableEdgeToEdge()
+            setContent {
+                val navigator = androidx.compose.runtime.saveable.rememberSaveable(
+                    saver = com.plej.mainverte.ui.navigatorSaver()
+                ) { Navigator(SpecimenGridScreen) }
+
+                DrawFullScreen(navigator)
+            }
+        }
+    }
 }
 
 @Composable
 private fun DrawFullScreen(navigator: Navigator) {
-    @Suppress("UnusedVariable") val searchVersion = navigator.searchVersion // force recomposition
     val currentScreen = navigator.current()
 
     Scaffold(
