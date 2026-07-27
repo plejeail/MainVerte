@@ -1,0 +1,1 @@
+﻿N:System.Linq;LINQ is forbidden in MainVerte. Use your brain instead.
