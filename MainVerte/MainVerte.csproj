@@ -8,6 +8,7 @@
         <ApplicationId Condition="'$(TargetFramework)'=='net10.0-android'">com.MainVerte.MainVerte</ApplicationId>
         <ApplicationVersion Condition="'$(TargetFramework)'=='net10.0-android'">1</ApplicationVersion>
         <ApplicationDisplayVersion Condition="'$(TargetFramework)'=='net10.0-android'">1.0</ApplicationDisplayVersion>
+        <AndroidGenerateLayoutBindings Condition="'$(TargetFramework)'=='net10.0-android'">true</AndroidGenerateLayoutBindings>
     </PropertyGroup>
     <ItemGroup>
         <Folder Include="Data\Sql\" />
@@ -29,6 +30,11 @@
       <AdditionalFiles Include="BannedSymbols.txt">
         <Link>BannedSymbols.txt</Link>
       </AdditionalFiles>
+    </ItemGroup>
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+      <PackageReference Include="Xamarin.AndroidX.AppCompat" Version="1.7.1.4" />
+      <PackageReference Include="Xamarin.AndroidX.Fragment" Version="1.8.9.3" />
+      <PackageReference Include="Xamarin.AndroidX.RecyclerView" Version="1.4.0.6" />
     </ItemGroup>
     <PropertyGroup>
         <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>

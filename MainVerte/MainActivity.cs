@@ -7,7 +7,8 @@ using _Microsoft.Android.Resource.Designer;
 using Android.App;
 using Android.OS;
 using Android.Runtime;
-using Activity = Android.App.Activity;
+using AndroidX.AppCompat.App;
+using AndroidX.Core.App;
 
 static class Services
 {
@@ -29,13 +30,32 @@ static class Services
 }
 
 [Activity(Label = "@string/app_name", MainLauncher = true)]
-sealed class MainActivity : Activity
+sealed class MainActivity : AppCompatActivity
 {
     protected override void OnCreate(Bundle? savedInstanceState)
     {
         base.OnCreate(savedInstanceState);
-        // Set our view from the "main" layout resource
         SetContentView(ResourceConstant.Layout.activity_main);
+
+        if (savedInstanceState is null) {
+            SupportFragmentManager.BeginTransaction()
+                                  .SetReorderingAllowed(true)
+                                  .Add(ResourceConstant.Id.main_fragment_container,
+                                       new CollectionFragment())
+                                  .Commit();
+        }
+    }
+
+    public void OpenAddPlant()
+    {
+        SupportFragmentManager
+            .BeginTransaction()
+            .SetReorderingAllowed(true)
+            .Replace(
+                     ResourceConstant.Id.main_fragment_container,
+                     new AddPlantFragment())
+            .AddToBackStack(null)
+            .Commit();
     }
 
     private static void OnUnhandledException(object? sender, UnhandledExceptionEventArgs e) {
