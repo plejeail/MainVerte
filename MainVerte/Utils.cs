@@ -104,3 +104,70 @@ static class Log
         throw new InvalidOperationException(message);
     }
 }
+
+static class CrashReport
+{
+    public static void Write(Exception ex) {
+        string applicationPath = Platform.ApplicationPath();
+        string diagnosticsPath = Path.Combine(applicationPath, "diagnostics");
+        string reportPath = Path.Combine(diagnosticsPath, "crash_report_pending.txt");
+        try {
+            Directory.CreateDirectory(diagnosticsPath);
+        } catch (Exception dirEx) {
+            Platform.LogError($"Failed to create directory for crash report: {dirEx}");
+            return;
+        }
+
+        string report = $"""
+                         timestamp:   {DateTimeOffset.UtcNow.ToUnixTimeSeconds()}
+                         description: {ex.Message}
+                         stacktrace:
+                         {ex.StackTrace ?? "<no stacktrace>"}
+                         """;
+
+        File.WriteAllText(reportPath, report);
+    }
+
+    public static void ProcessPending() {
+        string applicationPath = Platform.ApplicationPath();
+        string diagnosticsPath = Path.Combine(applicationPath, "diagnostics");
+        string reportPath = Path.Combine(diagnosticsPath, "crash_report_pending.txt");
+        if (!File.Exists(reportPath)) {
+            return;
+        }
+
+        try {
+            string[] lines = File.ReadAllLines(reportPath);
+            long? timestamp = ExtractTimestamp(lines);
+            if (timestamp == null) {
+                Platform.LogError("Missing or invalid crash report timestamp.");
+                return;
+            }
+
+            string archivedReportPath = Path.Combine(diagnosticsPath, $"crash_report_{timestamp}.txt");
+            File.Move(reportPath, archivedReportPath, true);
+        } catch (Exception ex) {
+            Platform.LogError($"Failed to process pending crash report: {ex}");
+        }
+    }
+
+    private static long? ExtractTimestamp(string[] lines) {
+        const string prefix = "timestamp: ";
+
+        foreach (string line in lines) {
+            if (!line.StartsWith(prefix, StringComparison.Ordinal)) {
+                continue;
+            }
+
+            string value = line[prefix.Length..].Trim();
+
+            if (Int64.TryParse(value, out long unixTimestamp)) {
+                return unixTimestamp;
+            }
+
+            break;
+        }
+
+        return null;
+    }
+}
