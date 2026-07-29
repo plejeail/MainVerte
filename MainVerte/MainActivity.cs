@@ -12,11 +12,19 @@ using Activity = Android.App.Activity;
 static class Services
 {
     public static bool Initialized = false;
+    public static readonly Database Database = new();
 
     public static void EnsureInitialized() {
         Require.True(!Initialized);
 
         Initialized = true;
+
+        string? dbPath = Application.Context.GetDatabasePath("mainverte.db")?.AbsolutePath;
+        if (dbPath is null) {
+            throw new InvalidOperationException("Database path is null");
+        }
+
+        Database.Initialize(dbPath);
     }
 }
 
