@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Folder Include="Data\Sql\" />
+        <Folder Include="UserInterface\" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.9" />
+    </ItemGroup>
+    <ItemGroup>
+        <EmbeddedResource Include="Data\Migrations\*.sql" />
+    </ItemGroup>
+    <ItemGroup>
+        <PackageReference
+            Include="Microsoft.CodeAnalysis.BannedApiAnalyzers"
+            Version="5.6.0"
+            PrivateAssets="all" />
+    </ItemGroup>
+    <ItemGroup>
+        <AdditionalFiles Include="BannedSymbols.txt">
+            <Link>BannedSymbols.txt</Link>
+        </AdditionalFiles>
+    </ItemGroup>
+    <PropertyGroup>
+        <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>
+    </PropertyGroup>
+</Project>

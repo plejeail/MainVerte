@@ -1,4 +1,4 @@
-﻿namespace MainVerte;
+﻿namespace MainVerteCore;
 
 
 using System;

@@ -2,7 +2,7 @@
 using System.Diagnostics;
 using System.Reflection;
 
-namespace MainVerte;
+namespace MainVerteCore;
 
 using System;
 using System.IO;
@@ -10,7 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Data.Sqlite;
 
-sealed class Database : IDisposable
+public sealed class Database : IDisposable
 {
     private const long   DatabaseVersion = 1;
     private const string MigrationPrefix = "MainVerte.Data.Migrations.";

@@ -1,6 +1,5 @@
-namespace MainVerte;
+namespace MainVerteAndroid;
 
-#if ANDROID
 using System;
 using System.Threading.Tasks;
 using _Microsoft.Android.Resource.Designer;
@@ -8,6 +7,8 @@ using Android.App;
 using Android.OS;
 using Android.Runtime;
 using Activity = Android.App.Activity;
+
+using MainVerteCore;
 
 static class Services
 {
@@ -52,9 +53,3 @@ sealed class MainActivity : Activity
         CrashReport.Write(e.Exception);
     }
 }
-#else
-static class Program
-{
-    public static void Main(string[] args) {}
-}
-#endif

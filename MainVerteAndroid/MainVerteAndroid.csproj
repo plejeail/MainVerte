@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-android</TargetFramework>
+        <SupportedOSPlatformVersion>27</SupportedOSPlatformVersion>
+        <OutputType>Exe</OutputType>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>disable</ImplicitUsings>
+        <ApplicationId>com.MainVerte.MainVerte</ApplicationId>
+        <ApplicationVersion>1</ApplicationVersion>
+        <ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+        <AndroidGenerateLayoutBindings>true</AndroidGenerateLayoutBindings>
+    </PropertyGroup>
+    <ItemGroup>
+        <Folder Include="UserInterface\" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+        <Compile Remove="Ui\**\*.cs" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(TargetFramework)' == 'net10.0-android'">
+        <PackageReference Include="Xamarin.AndroidX.AppCompat" Version="1.7.1.4" />
+        <PackageReference Include="Xamarin.AndroidX.Fragment" Version="1.8.9.3" />
+        <PackageReference Include="Xamarin.AndroidX.RecyclerView" Version="1.4.0.6" />
+    </ItemGroup>
+    <ItemGroup>
+      <ProjectReference Include="..\MainVerteCore\MainVerteCore.csproj" />
+    </ItemGroup>
+    <PropertyGroup>
+        <WarningsAsErrors>$(WarningsAsErrors);RS0030</WarningsAsErrors>
+    </PropertyGroup>
+</Project>

@@ -1,4 +1,4 @@
-﻿namespace MainVerte;
+﻿namespace MainVerteCore;
 
 using System;
 using System.Collections.Generic;
@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Runtime.CompilerServices;
 
-static class Require
+public static class Require
 {
     [Conditional("DEBUG")]
     public static void True(bool condition, [CallerArgumentExpression(nameof(condition))] string? expression = null) {
@@ -43,7 +43,7 @@ static class Require
     }
 }
 
-static class Ensure
+public static class Ensure
 {
 
     [Conditional("DEBUG")]
@@ -80,7 +80,7 @@ static class Ensure
     }
 }
 
-static class Log
+public static class Log
 {
     public static void Info(string message) {
         Platform.LogInfo(message);
@@ -105,7 +105,7 @@ static class Log
     }
 }
 
-static class CrashReport
+public static class CrashReport
 {
     public static void Write(Exception ex) {
         string applicationPath = Platform.ApplicationPath();
