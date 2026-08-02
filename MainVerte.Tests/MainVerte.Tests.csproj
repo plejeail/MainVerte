@@ -5,6 +5,7 @@
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <IsPackable>false</IsPackable>
+        <RootNamespace>MainVerteTests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
@@ -19,7 +20,7 @@
     </ItemGroup>
 
     <ItemGroup>
-      <ProjectReference Include="..\MainVerteCore\MainVerteCore.csproj" />
+      <ProjectReference Include="..\MainVerte.Core\MainVerte.Core.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,11 +1,15 @@
-﻿namespace MainVerteCore;
-
-using System;
-using System.Collections.Generic;
+﻿//! MainVerte.Core/Utils.cs ---------------------------------------------------
+//!
+//! TOOLS AND UTILITARY METHODS
+//!
+//! Toolbox that may be used anywhere, unrelated to MainVerte.
+//! ---------------------------------------------------------------------------
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Runtime.CompilerServices;
+
+namespace MainVerte.Core;
+
 
 public static class Require
 {
@@ -98,10 +102,9 @@ public static class Log
         Platform.LogWarning(message);
     }
 
-    [DoesNotReturn]
     public static void Error(string message) {
+        System.Diagnostics.Debug.Fail(message);
         Platform.LogError(message);
-        throw new InvalidOperationException(message);
     }
 }
 
@@ -140,14 +143,26 @@ public static class CrashReport
             string[] lines = File.ReadAllLines(reportPath);
             long? timestamp = ExtractTimestamp(lines);
             if (timestamp == null) {
-                Platform.LogError("Missing or invalid crash report timestamp.");
+                Platform.LogWarning("Missing or invalid crash report timestamp.");
+#if !DEBUG
+                File.Delete(reportPath);
+#endif
                 return;
             }
 
             string archivedReportPath = Path.Combine(diagnosticsPath, $"crash_report_{timestamp}.txt");
             File.Move(reportPath, archivedReportPath, true);
         } catch (Exception ex) {
-            Platform.LogError($"Failed to process pending crash report: {ex}");
+            Platform.LogWarning($"Failed to process pending crash report: {ex}");
+#if !DEBUG
+            try {
+                if (File.Exists(reportPath)) {
+                    File.Delete(reportPath);
+                }
+            } catch (Exception e) {
+                Platform.LogWarning("Unable to remove corrupted report");
+            }
+#endif
         }
     }
 

@@ -1,10 +1,10 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainVerteCore", "MainVerteCore\MainVerteCore.csproj", "{8CF5B440-732D-4B1F-BE77-63B9B5C1223A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainVerte.Core", "MainVerte.Core\MainVerte.Core.csproj", "{8CF5B440-732D-4B1F-BE77-63B9B5C1223A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainVerteTests", "MainVerteTests\MainVerteTests.csproj", "{F626708A-4C72-4C18-9774-898C8B27D393}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainVerte.Tests", "MainVerte.Tests\MainVerte.Tests.csproj", "{F626708A-4C72-4C18-9774-898C8B27D393}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainVerteAndroid", "MainVerteAndroid\MainVerteAndroid.csproj", "{AC9E21B6-01DC-4CA6-A06C-2FCE2E9B10F5}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MainVerte.AndroidApp", "MainVerte.AndroidApp\MainVerte.AndroidApp.csproj", "{AC9E21B6-01DC-4CA6-A06C-2FCE2E9B10F5}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

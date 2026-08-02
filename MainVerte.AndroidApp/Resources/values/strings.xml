@@ -1,0 +1,14 @@
+<resources>
+    <string name="app_name">MainVerte</string>
+    <string name="collection_add_specimen">Add a specimen</string>
+    <string name="specimen_details_name_editor_hint">Specimen name</string>
+    <string name="specimen_details_unknown_species">Unknown species</string>
+    <string name="specimen_detail_name_mandatory">Name is mandatory</string>
+    <string name="toolbar_menu_action_edit">Edit</string>
+    <string name="toolbar_menu_action_save">Save</string>
+    <string name="toolbar_menu_action_cancel">Cancel</string>
+    <string name="specimen_detail_title_create">New specimen</string>
+    <string name="specimen_detail_title_read">Specimen</string>
+    <string name="specimen_detail_title_edit">Specimen</string>
+    <string name="collection_title">Collection</string>
+</resources>

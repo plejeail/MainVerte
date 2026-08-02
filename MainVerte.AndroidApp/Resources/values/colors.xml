@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<resources>
+    <color name="mv_primary">#176B4D</color>
+    <color name="mv_primary_dark">#0E4A34</color>
+    <color name="mv_on_primary">#FFFFFF</color>
+    <color name="mv_secondary">#006E5C</color>
+    <color name="mv_on_secondary">#FFFFFF</color>
+    <color name="mv_background">#F9FBF9</color>
+    <color name="mv_surface">#FFFFFF</color>
+    <color name="mv_on_surface">#1A1C1B</color>
+</resources>

@@ -1,0 +1,48 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <ImageView
+            android:id="@+id/specimen_image"
+            android:layout_width="match_parent"
+            android:layout_height="240dp"
+            android:scaleType="centerCrop" />
+
+        <TextView
+            android:id="@+id/specimen_name"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textSize="26sp"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/specimen_name_editor"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:inputType="textCapSentences"
+            android:singleLine="true"
+            android:textSize="26sp"
+            android:hint="@string/specimen_details_name_editor_hint"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/specimen_species"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:textSize="16sp" />
+
+    </LinearLayout>
+
+</ScrollView>

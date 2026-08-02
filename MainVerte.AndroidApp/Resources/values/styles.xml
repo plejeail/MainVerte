@@ -1,0 +1,22 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+
+<resources>
+    <style name="MainVerteTheme"
+           parent="Theme.MaterialComponents.Light.NoActionBar">
+
+        <item name="colorPrimary">@color/mv_primary</item>
+        <item name="colorPrimaryVariant">@color/mv_primary_dark</item>
+        <item name="colorOnPrimary">@color/mv_on_primary</item>
+        <item name="colorSecondary">@color/mv_secondary</item>
+        <item name="colorOnSecondary">@color/mv_on_secondary</item>
+        <item name="colorSurface">@color/mv_surface</item>
+        <item name="colorOnSurface">@color/mv_on_surface</item>
+
+        <item name="android:windowBackground">@color/mv_background</item>
+        <item name="android:navigationBarColor">@color/mv_background</item>
+        <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:statusBarColor">@color/mv_primary_dark</item>
+        <item name="android:windowLightStatusBar">false</item>
+
+    </style>
+</resources>

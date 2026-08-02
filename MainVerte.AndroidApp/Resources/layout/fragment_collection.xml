@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:xamarin="http://schemas.xamarin.com/android/xamarin/tools"
+    xamarin:managedType="AndroidX.CoordinatorLayout.Widget.CoordinatorLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <androidx.recyclerview.widget.RecyclerView
+        xamarin:managedType="AndroidX.RecyclerView.Widget.RecyclerView"
+        android:id="@+id/specimen_grid"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:padding="8dp"
+        android:paddingBottom="88dp" />
+
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        xamarin:managedType="Google.Android.Material.FloatingActionButton.FloatingActionButton"
+        android:id="@+id/add_specimen"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="16dp"
+        android:contentDescription="@string/collection_add_specimen"
+        app:srcCompat="@android:drawable/ic_input_add" />
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
