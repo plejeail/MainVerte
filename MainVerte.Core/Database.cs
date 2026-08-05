@@ -458,4 +458,17 @@ public sealed class Database : IDisposable
             reader.GetInt64(8),
             reader.GetInt64(9));
     }
+
+    public Task<bool> DeleteSpecimenAsync(MainVerteId id) {
+        return Enqueue(connection => {
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                DELETE FROM specimen
+                WHERE id = $id;
+            """;
+            cmd.Parameters.AddWithValue("$id", id.Value);
+
+            return cmd.ExecuteNonQuery() == 1;
+        });
+    }
 }

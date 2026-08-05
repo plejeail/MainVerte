@@ -4,6 +4,8 @@ using Android.OS;
 using Android.Views;
 using AndroidX.Fragment.App;
 
+using AlertDialog = Android.App.AlertDialog;
+
 using MainVerte.Core;
 
 namespace MainVerte.AndroidApp;
@@ -17,7 +19,7 @@ sealed class SpecimenDetailsFragment : Fragment
     private const string SpecimenIdArgument = "specimen_id";
     private const string CollectionIdArgument = "collection_id";
 
-    private enum ItemId { Edit = 1, Save = 2, Cancel = 3 }
+    private enum ItemId { Edit = 1, Save = 2, Cancel = 3, Delete = 4, }
 
     private Binding.fragment_specimen_details? _binding;
     private SpecimenDetail? _specimen;
@@ -103,6 +105,41 @@ sealed class SpecimenDetailsFragment : Fragment
         } catch (Exception ex) {
             Log.Error(ex.ToString());
         }
+    }
+
+    private async Task DeleteSpecimenAsync() {
+        SpecimenDetail? specimen = _specimen;
+        if (specimen == null) {
+            return;
+        }
+
+        try {
+            bool deleted = await Services.Database.DeleteSpecimenAsync(specimen.Id);
+            if (!deleted) {
+                return;
+            }
+
+            _specimen = null;
+            if (IsAdded) {
+                ParentFragmentManager.PopBackStack();
+            }
+        } catch (Exception ex) {
+            Log.Error(ex.ToString());
+        }
+    }
+
+    private void DeleteSpecimen() {
+        if (_specimen == null || Activity == null) {
+            return;
+        }
+
+        AlertDialog.Builder builder = new(Activity);
+        builder.SetTitle(Resource.String.specimen_detail_delete_confirmation_title);
+        builder.SetMessage(Resource.String.specimen_detail_delete_confirmation_message);
+        builder.SetNegativeButton(Resource.String.specimen_detail_delete_confirmation_no, (_, _) => { });
+        builder.SetPositiveButton(Resource.String.specimen_detail_delete_confirmation_yes,
+                                  (_, _) => _ = DeleteSpecimenAsync());
+        builder.Show();
     }
 
     private void EnterEditMode() {
@@ -221,26 +258,27 @@ sealed class SpecimenDetailsFragment : Fragment
             switch(_mode) {
             case SpecimenDetailsMode.Read:
                 actions = [
-                    new ToolbarMenuAction(
-                        (int)ItemId.Edit,
-                        GetString(Resource.String.toolbar_menu_action_edit),
-                        Android.Resource.Drawable.IcMenuEdit,
-                        EnterEditMode),
+                    new ToolbarMenuAction((int)ItemId.Delete,
+                                          GetString(Resource.String.toolbar_menu_action_delete),
+                                          Android.Resource.Drawable.IcMenuDelete,
+                                          DeleteSpecimen),
+                    new ToolbarMenuAction((int)ItemId.Edit,
+                                          GetString(Resource.String.toolbar_menu_action_edit),
+                                          Android.Resource.Drawable.IcMenuEdit,
+                                          EnterEditMode),
                 ];
                 break;
             case SpecimenDetailsMode.Create:
             case SpecimenDetailsMode.Edit:
                 actions = [
-                    new ToolbarMenuAction(
-                        (int)ItemId.Save,
-                        GetString(Resource.String.toolbar_menu_action_save),
-                        Android.Resource.Drawable.IcMenuSave,
-                        () => _ = SaveAsync()),
-                    new ToolbarMenuAction(
-                        (int)ItemId.Cancel,
-                        GetString(Resource.String.toolbar_menu_action_cancel),
-                        Android.Resource.Drawable.IcMenuCloseClearCancel,
-                        CancelChanges),
+                    new ToolbarMenuAction((int)ItemId.Save,
+                                          GetString(Resource.String.toolbar_menu_action_save),
+                                          Android.Resource.Drawable.IcMenuSave,
+                                          () => _ = SaveAsync()),
+                    new ToolbarMenuAction((int)ItemId.Cancel,
+                                          GetString(Resource.String.toolbar_menu_action_cancel),
+                                          Android.Resource.Drawable.IcMenuCloseClearCancel,
+                                          CancelChanges),
                 ];
                 break;
             default:

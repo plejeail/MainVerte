@@ -158,6 +158,28 @@ public class DatabaseTests
     }
 
     [Fact]
+    public async Task DeleteSpecimenAsync_Deletes_Existing_Specimen() {
+        string dbPath = CreateTempDbPath();
+        using var db = new Database();
+        db.Initialize(dbPath);
+
+        await db.ExecuteNonQueryAsync("""
+            INSERT INTO gardener(id, display_name, created_at) VALUES (1, 'Test', 1000);
+            INSERT INTO collection(id, gardener_id, name, created_at, modified_at)
+                VALUES (11, 1, 'Collection', 1000, 1000);
+            INSERT INTO specimen(id, collection_id, display_name, created_at, modified_at)
+                VALUES (3, 11, 'Ma plante', 1000, 1000);
+            """);
+
+        MainVerteId specimenId = new(3);
+
+        Assert.True(await db.DeleteSpecimenAsync(specimenId));
+        Assert.Null(await db.GetSpecimenAsync(specimenId));
+        Assert.Empty(await db.ListSpecimensAsync());
+        Assert.False(await db.DeleteSpecimenAsync(specimenId));
+    }
+
+    [Fact]
     public async Task Initialize_Applies_Embedded_Migration() {
         string    dbPath = CreateTempDbPath();
         using var db     = new Database();
