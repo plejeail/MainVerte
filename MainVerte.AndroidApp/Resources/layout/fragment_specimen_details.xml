@@ -36,6 +36,14 @@
             android:hint="@string/specimen_details_name_editor_hint"
             android:visibility="gone" />
 
+        <ProgressBar
+            android:id="@+id/operation_progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="16dp"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/specimen_species"
             android:layout_width="match_parent"

@@ -23,6 +23,7 @@ sealed class SpecimenDetailsFragment : Fragment
 
     private Binding.fragment_specimen_details? _binding;
     private SpecimenDetail? _specimen;
+    private bool _isBusy;
 
     private SpecimenDetailsMode _mode;
     private MainVerteId _newSpecimenCollectionId = MainVerteId.Invalid;
@@ -108,11 +109,16 @@ sealed class SpecimenDetailsFragment : Fragment
     }
 
     private async Task DeleteSpecimenAsync() {
+        if (_isBusy) {
+            return;
+        }
+
         SpecimenDetail? specimen = _specimen;
         if (specimen == null) {
             return;
         }
 
+        SetBusy(true);
         try {
             bool deleted = await Services.Database.DeleteSpecimenAsync(specimen.Id);
             if (!deleted) {
@@ -125,11 +131,13 @@ sealed class SpecimenDetailsFragment : Fragment
             }
         } catch (Exception ex) {
             Log.Error(ex.ToString());
+        } finally {
+            SetBusy(false);
         }
     }
 
     private void DeleteSpecimen() {
-        if (_specimen == null || Activity == null) {
+        if (_isBusy || _specimen == null || Activity == null) {
             return;
         }
 
@@ -143,7 +151,7 @@ sealed class SpecimenDetailsFragment : Fragment
     }
 
     private void EnterEditMode() {
-        if (_specimen == null) {
+        if (_isBusy || _specimen == null) {
             return;
         }
 
@@ -153,7 +161,7 @@ sealed class SpecimenDetailsFragment : Fragment
     }
 
     private async Task SaveAsync() {
-        if (_binding == null) {
+        if (_isBusy || _binding == null) {
             return;
         }
 
@@ -164,6 +172,7 @@ sealed class SpecimenDetailsFragment : Fragment
             return;
         }
 
+        SetBusy(true);
         try {
             if (_mode == SpecimenDetailsMode.Create) {
                 MainVerteId collectionId = _newSpecimenCollectionId;
@@ -211,10 +220,16 @@ sealed class SpecimenDetailsFragment : Fragment
             UpdateToolbar();
         } catch (Exception ex) {
             Log.Error(ex.ToString());
+        } finally {
+            SetBusy(false);
         }
     }
 
     private void CancelChanges() {
+        if (_isBusy) {
+            return;
+        }
+
         if (_mode == SpecimenDetailsMode.Create) {
             ParentFragmentManager.PopBackStack();
             return;
@@ -252,37 +267,50 @@ sealed class SpecimenDetailsFragment : Fragment
         _binding.specimen_name_editor.Enabled = isWriting;
     }
 
+    private void SetBusy(bool busy) {
+        _isBusy = busy;
+
+        if (_binding != null) {
+            _binding.operation_progress.Visibility = busy ? ViewStates.Visible : ViewStates.Gone;
+            _binding.specimen_name_editor.Enabled = !busy && _mode != SpecimenDetailsMode.Read;
+        }
+
+        UpdateToolbar();
+    }
+
     private void UpdateToolbar() {
         if (Activity is MainActivity activity) {
-            ToolbarMenuAction[] actions;
-            switch(_mode) {
-            case SpecimenDetailsMode.Read:
-                actions = [
-                    new ToolbarMenuAction((int)ItemId.Delete,
-                                          GetString(Resource.String.toolbar_menu_action_delete),
-                                          Android.Resource.Drawable.IcMenuDelete,
-                                          DeleteSpecimen),
-                    new ToolbarMenuAction((int)ItemId.Edit,
-                                          GetString(Resource.String.toolbar_menu_action_edit),
-                                          Android.Resource.Drawable.IcMenuEdit,
-                                          EnterEditMode),
-                ];
-                break;
-            case SpecimenDetailsMode.Create:
-            case SpecimenDetailsMode.Edit:
-                actions = [
-                    new ToolbarMenuAction((int)ItemId.Save,
-                                          GetString(Resource.String.toolbar_menu_action_save),
-                                          Android.Resource.Drawable.IcMenuSave,
-                                          () => _ = SaveAsync()),
-                    new ToolbarMenuAction((int)ItemId.Cancel,
-                                          GetString(Resource.String.toolbar_menu_action_cancel),
-                                          Android.Resource.Drawable.IcMenuCloseClearCancel,
-                                          CancelChanges),
-                ];
-                break;
-            default:
-                throw new InvalidOperationException("Unknown specimen details mode.");
+            ToolbarMenuAction[] actions = Array.Empty<ToolbarMenuAction>();
+            if (!_isBusy) {
+                switch(_mode) {
+                case SpecimenDetailsMode.Read:
+                    actions = [
+                        new ToolbarMenuAction((int)ItemId.Delete,
+                                              GetString(Resource.String.toolbar_menu_action_delete),
+                                              Android.Resource.Drawable.IcMenuDelete,
+                                              DeleteSpecimen),
+                        new ToolbarMenuAction((int)ItemId.Edit,
+                                              GetString(Resource.String.toolbar_menu_action_edit),
+                                              Android.Resource.Drawable.IcMenuEdit,
+                                              EnterEditMode),
+                    ];
+                    break;
+                case SpecimenDetailsMode.Create:
+                case SpecimenDetailsMode.Edit:
+                    actions = [
+                        new ToolbarMenuAction((int)ItemId.Save,
+                                              GetString(Resource.String.toolbar_menu_action_save),
+                                              Android.Resource.Drawable.IcMenuSave,
+                                              () => _ = SaveAsync()),
+                        new ToolbarMenuAction((int)ItemId.Cancel,
+                                              GetString(Resource.String.toolbar_menu_action_cancel),
+                                              Android.Resource.Drawable.IcMenuCloseClearCancel,
+                                              CancelChanges),
+                    ];
+                    break;
+                default:
+                    throw new InvalidOperationException("Unknown specimen details mode.");
+                }
             }
 
             activity.ConfigureToolbar(new ToolbarConfiguration(GetToolbarTitleResource(_mode), true), actions);
