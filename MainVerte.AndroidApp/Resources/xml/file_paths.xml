@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <files-path
+        name="photo_pending"
+        path="photos/pending/" />
+    <files-path
+        name="photo_specimens"
+        path="photos/specimens/" />
+</paths>

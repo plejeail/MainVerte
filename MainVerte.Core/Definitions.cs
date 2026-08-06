@@ -9,7 +9,7 @@ public readonly record struct MainVerteId(int Value) {
     public static readonly MainVerteId Invalid = new(-1);
 }
 
-public sealed record SpecimenSummary(MainVerteId id,
+public sealed record SpecimenSummary(MainVerteId Id,
                                      string Name,
                                      string Species,
                                      string? PhotoUri);
@@ -26,5 +26,5 @@ public sealed record SpecimenDetail(
     long CreatedAt,
     long ModifiedAt);
 
-public sealed record SpeciesSummary(MainVerteId id, string Name);
-public sealed record SpeciesDetail(SpeciesSummary summary);
+public sealed record SpeciesSummary(MainVerteId Id, string Name);
+public sealed record SpeciesDetail(SpeciesSummary Summary);

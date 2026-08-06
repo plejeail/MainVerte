@@ -11,11 +11,38 @@
         android:orientation="vertical"
         android:padding="16dp">
 
-        <ImageView
-            android:id="@+id/specimen_image"
+        <FrameLayout
+            android:id="@+id/specimen_photo_frame"
             android:layout_width="match_parent"
             android:layout_height="240dp"
-            android:scaleType="centerCrop" />
+            android:background="@android:color/darker_gray">
+
+            <ImageView
+                android:id="@+id/specimen_image"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@string/specimen_photo_content_description"
+                android:scaleType="centerCrop" />
+
+            <TextView
+                android:id="@+id/specimen_photo_placeholder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="@string/specimen_photo_placeholder"
+                android:textColor="@android:color/white"
+                android:textSize="16sp" />
+
+            <Button
+                android:id="@+id/specimen_photo_edit"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_margin="8dp"
+                android:text="@string/specimen_photo_edit"
+                android:visibility="gone" />
+
+        </FrameLayout>
 
         <TextView
             android:id="@+id/specimen_name"

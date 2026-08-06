@@ -8,16 +8,19 @@
 //! during application startup.
 //!
 //! ---------------------------------------------------------------------------
+
+using System.Runtime.CompilerServices;
+
 namespace MainVerte.Core;
 
 
 public interface IPlatform
 {
-    public void   LogError(string message);
-    public void   LogWarning(string message);
-    public void   LogInfo(string message);
-    public void   LogVerbose(string message);
-    public void   LogDebug(string message);
+    public void LogError(string message);
+    public void LogWarning(string message);
+    public void LogInfo(string message);
+    public void LogVerbose(string message);
+    public void LogDebug(string message);
     public string ApplicationPath();
 }
 
@@ -52,28 +55,35 @@ public static class Platform
 {
     private static IPlatform _platform = new DefaultPlatform();
 
+    /// <summary> Replace dedfault implementation with a platform-specific implementation. </summary>
+    /// <param name="platform">The implementation to use for platform calls.</param>
     public static void SetImplementation(IPlatform platform) {
         _platform = platform;
     }
 
-    internal static void LogError(string message) {
-        _platform.LogError(message);
-    }
-
-    internal static void LogWarning(string message) {
-        _platform.LogWarning(message);
-    }
-
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void LogInfo(string message) {
         _platform.LogInfo(message);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void LogVerbose(string message) {
         _platform.LogVerbose(message);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void LogDebug(string message) {
         _platform.LogDebug(message);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void LogWarning(string message) {
+        _platform.LogWarning(message);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void LogError(string message) {
+        _platform.LogError(message);
     }
 
     internal static string ApplicationPath() {

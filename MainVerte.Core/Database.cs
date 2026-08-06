@@ -413,7 +413,7 @@ public sealed class Database : IDisposable
     }
 
     private static void ValidateSpecimen(SpecimenDetail specimen) {
-        if (string.IsNullOrWhiteSpace(specimen.DisplayName)) {
+        if (String.IsNullOrWhiteSpace(specimen.DisplayName)) {
             throw new ArgumentException("Specimen display name cannot be empty.", nameof(specimen));
         }
     }

@@ -57,9 +57,9 @@ public class DatabaseTests
 
         await db.ExecuteNonQueryAsync("CREATE TABLE t(id INTEGER PRIMARY KEY, v INTEGER NOT NULL);");
 
-        const int N     = 50;
-        var    tasks = new Task[N];
-        for (int i = 0; i < N; i++)
+        const int n     = 50;
+        var    tasks = new Task[n];
+        for (int i = 0; i < n; i++)
         {
             tasks[i] = db.ExecuteNonQueryAsync("INSERT INTO t(v) VALUES (7);");
         }
@@ -67,7 +67,7 @@ public class DatabaseTests
         await Task.WhenAll(tasks);
 
         long count = await db.ExecuteScalarInt64Async("SELECT COUNT(*) FROM t;");
-        Assert.Equal(N, count);
+        Assert.Equal(n, count);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public class DatabaseTests
         Assert.Equal("Monstera deliciosa", specimens[0].Species);
         Assert.Equal("photo://plant", specimens[0].PhotoUri);
         Assert.Equal("Sans espece", specimens[1].Name);
-        Assert.Equal(string.Empty, specimens[1].Species);
+        Assert.Equal(String.Empty, specimens[1].Species);
         Assert.Null(specimens[1].PhotoUri);
     }
 
@@ -129,7 +129,7 @@ public class DatabaseTests
         SpecimenDetail? created = await db.GetSpecimenAsync(id);
 
         Assert.NotNull(created);
-        Assert.Equal(11, created!.CollectionId.Value);
+        Assert.Equal(11, created.CollectionId.Value);
         Assert.Equal(7, created.SpeciesId!.Value.Value);
         Assert.Equal("Monstera deliciosa", created.Species);
         Assert.Equal("Ma plante", created.DisplayName);
@@ -148,13 +148,43 @@ public class DatabaseTests
 
         SpecimenDetail? updated = await db.GetSpecimenAsync(id);
         Assert.NotNull(updated);
-        Assert.Equal("Ma nouvelle plante", updated!.DisplayName);
+        Assert.Equal("Ma nouvelle plante", updated.DisplayName);
         Assert.Null(updated.SpeciesId);
         Assert.Null(updated.Species);
         Assert.Null(updated.PhotoUri);
         Assert.Null(updated.AcquiredAt);
         Assert.Null(await db.GetSpecimenAsync(new MainVerteId(999)));
         Assert.False(await db.UpdateSpecimenAsync(updatedInput with { Id = new MainVerteId(999) }));
+    }
+
+    [Fact]
+    public async Task SpecimenEditorAsync_Creates_Updates_And_Deletes_A_Specimen() {
+        string dbPath = CreateTempDbPath();
+        using var db = new Database();
+        db.Initialize(dbPath);
+
+        await db.ExecuteNonQueryAsync("""
+            INSERT INTO gardener(id, display_name, created_at) VALUES (1, 'Test', 1000);
+            INSERT INTO collection(id, gardener_id, name, created_at, modified_at)
+                VALUES (11, 1, 'Collection', 1000, 1000);
+        """);
+
+        SpecimenEditor editor = new(db);
+        editor.StartNew(new MainVerteId(11));
+        editor.UpdateDraft("Ma plante", "photo://plant");
+        SpecimenDetail created = await editor.SaveAsync();
+
+        Assert.NotEqual(MainVerteId.Invalid, created.Id);
+        Assert.Equal("Ma plante", created.DisplayName);
+        Assert.Equal("photo://plant", created.PhotoUri);
+
+        editor.UpdateDraft("Ma nouvelle plante", null);
+        SpecimenDetail updated = await editor.SaveAsync();
+
+        Assert.Equal("Ma nouvelle plante", updated.DisplayName);
+        Assert.Null(updated.PhotoUri);
+        Assert.True(await editor.DeleteAsync());
+        Assert.Null(await editor.LoadAsync(updated.Id));
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using Android.App;
 using Android.OS;
 using Android.Runtime;
 using Android.Views;
+using AndroidX.Activity;
 using AndroidX.AppCompat.App;
 
 using MainVerte.Core;
@@ -29,6 +30,7 @@ static class Services
         }
 
         Database.Initialize(dbPath);
+        PhotoStorage.CleanupPendingFiles();
     }
 }
 
@@ -55,6 +57,7 @@ sealed class MainActivity : AppCompatActivity
         }
 
         base.OnCreate(savedInstanceState);
+        OnBackPressedDispatcher.AddCallback(this, new MainActivityBackCallback(this));
         // Set our view from the "main" layout resource
         SetContentView(Resource.Layout.activity_main);
 
@@ -68,8 +71,39 @@ sealed class MainActivity : AppCompatActivity
 
     public override bool OnSupportNavigateUp()
     {
+        return HandleBackNavigation();
+    }
+
+    private bool HandleBackNavigation()
+    {
+        AndroidX.Fragment.App.Fragment? currentFragment = SupportFragmentManager.FindFragmentById(Resource.Id.main_fragment_container);
+        if (currentFragment is SpecimenDetailsFragment specimenDetails
+            && specimenDetails.HandleBackNavigation()) {
+            return true;
+        }
+
+        if (SupportFragmentManager.BackStackEntryCount == 0) {
+            return false;
+        }
+
         SupportFragmentManager.PopBackStack();
         return true;
+    }
+
+    private sealed class MainActivityBackCallback(MainActivity activity) : OnBackPressedCallback(true)
+    {
+        private readonly MainActivity _activity = activity;
+
+        public override void HandleOnBackPressed()
+        {
+            if (_activity.HandleBackNavigation()) {
+                return;
+            }
+
+            Enabled = false;
+            _activity.OnBackPressedDispatcher.OnBackPressed();
+            Enabled = true;
+        }
     }
 
     public void ShowCollection() {

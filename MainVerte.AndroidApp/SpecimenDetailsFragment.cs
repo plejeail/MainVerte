@@ -1,10 +1,23 @@
 using System;
 using System.Threading.Tasks;
+using Android.Content;
+using Android.Content.PM;
+using Android.Graphics;
+using Android.Graphics.Drawables;
 using Android.OS;
+using Android.Provider;
 using Android.Views;
+using Android.Widget;
+using AndroidX.Activity.Result;
+using AndroidX.Activity.Result.Contract;
 using AndroidX.Fragment.App;
+using AndroidX.Lifecycle;
 
 using AlertDialog = Android.App.AlertDialog;
+using AndroidActivityFlags = Android.Content.ActivityFlags;
+using Dialog = Android.App.Dialog;
+using Result = Android.App.Result;
+using AndroidUri = Android.Net.Uri;
 
 using MainVerte.Core;
 
@@ -13,20 +26,273 @@ namespace MainVerte.AndroidApp;
 
 enum SpecimenDetailsMode { Read, Edit, Create, }
 
+enum SpecimenDetailsOperationState
+{
+    Idle,
+    Saving,
+    Deleting,
+    ImportingPhoto,
+}
+
+sealed class SpecimenDetailsViewModel : ViewModel
+{
+    private Task<SpecimenDetail?>? _loadTask;
+    private bool _cleared;
+    private bool _initialized;
+    public MainVerteId CollectionId = MainVerteId.Invalid;
+    public MainVerteId SpecimenId   = MainVerteId.Invalid;
+    public SpecimenDetailsMode Mode;
+    public SpecimenDetailsOperationState OperationState;
+    public readonly PhotoEditSession PhotoSession = new();
+    public readonly SpecimenEditor SpecimenEditor = new(Services.Database);
+    public string DraftDisplayName = String.Empty;
+
+    public bool IsBusy() {
+        return OperationState == SpecimenDetailsOperationState.Saving
+            || OperationState == SpecimenDetailsOperationState.Deleting;
+    }
+
+    public event Action? StateChanged;
+
+    public void Initialize(SpecimenDetailsMode mode, MainVerteId id)
+    {
+        if (_initialized) {
+            return;
+        }
+
+        _initialized = true;
+        Mode = mode;
+        if (mode == SpecimenDetailsMode.Create) {
+            CollectionId = id;
+            SpecimenEditor.StartNew(CollectionId);
+        } else {
+            SpecimenId = id;
+        }
+
+        DraftDisplayName = SpecimenEditor.Specimen?.DisplayName ?? String.Empty;
+    }
+
+    public Task<SpecimenDetail?> LoadAsync()
+    {
+        if (_loadTask != null) {
+            return _loadTask;
+        }
+
+        _loadTask = LoadCoreAsync();
+        return _loadTask;
+    }
+
+    public void SetDraftDisplayName(string displayName)
+    {
+        Require.NotNull(displayName);
+        DraftDisplayName = displayName;
+    }
+
+    public void EnterEditMode()
+    {
+        if (OperationState != SpecimenDetailsOperationState.Idle || SpecimenEditor.Specimen == null) {
+            return;
+        }
+
+        Mode = SpecimenDetailsMode.Edit;
+        PhotoSession.ResetToOriginal();
+        DraftDisplayName = SpecimenEditor.Specimen.DisplayName;
+        NotifyStateChanged();
+    }
+
+    public Task ImportGalleryPhotoAsync(ContentResolver resolver, AndroidUri sourceUri)
+    {
+        Require.NotNull(resolver);
+        Require.NotNull(sourceUri);
+
+        if (OperationState != SpecimenDetailsOperationState.Idle) {
+            return Task.CompletedTask;
+        }
+
+        SetOperationState(SpecimenDetailsOperationState.ImportingPhoto);
+        return ImportGalleryPhotoCoreAsync(resolver, sourceUri);
+    }
+
+    public Task SaveAsync()
+    {
+        if (OperationState != SpecimenDetailsOperationState.Idle) {
+            return Task.CompletedTask;
+        }
+
+        SetOperationState(SpecimenDetailsOperationState.Saving);
+        return SaveCoreAsync();
+    }
+
+    public Task<bool> DeleteAsync()
+    {
+        if (OperationState != SpecimenDetailsOperationState.Idle) {
+            return Task.FromResult(false);
+        }
+
+        SpecimenDetail? specimen = SpecimenEditor.Specimen;
+        if (specimen == null) {
+            return Task.FromResult(false);
+        }
+
+        SetOperationState(SpecimenDetailsOperationState.Deleting);
+        return DeleteCoreAsync(specimen);
+    }
+
+    public bool CancelChanges()
+    {
+        if (IsBusy()) {
+            return false;
+        }
+
+        PhotoSession.CancelChanges();
+        SpecimenEditor.Cancel();
+        DraftDisplayName = SpecimenEditor.Specimen?.DisplayName ?? String.Empty;
+
+        if (Mode != SpecimenDetailsMode.Create) {
+            Mode = SpecimenDetailsMode.Read;
+        }
+
+        SetOperationState(SpecimenDetailsOperationState.Idle);
+        return true;
+    }
+
+    public void RemovePhoto()
+    {
+        if (OperationState != SpecimenDetailsOperationState.Idle) {
+            return;
+        }
+
+        PhotoSession.RemovePhoto(Mode == SpecimenDetailsMode.Edit);
+        NotifyStateChanged();
+    }
+
+    protected override void OnCleared()
+    {
+        _cleared = true;
+        if (OperationState == SpecimenDetailsOperationState.Idle) {
+            PhotoSession.CleanupUncommittedPhotoFiles();
+        }
+
+        StateChanged = null;
+        base.OnCleared();
+    }
+
+    private async Task<SpecimenDetail?> LoadCoreAsync()
+    {
+        try {
+            SpecimenDetail? specimen = await SpecimenEditor.LoadAsync(SpecimenId);
+            if (specimen != null) {
+                PhotoSession.SetOriginalPhoto(specimen.PhotoUri);
+                DraftDisplayName = specimen.DisplayName;
+            }
+
+            NotifyStateChanged();
+            return specimen;
+        } catch {
+            NotifyStateChanged();
+            throw;
+        }
+    }
+
+    private async Task ImportGalleryPhotoCoreAsync(ContentResolver resolver, AndroidUri sourceUri)
+    {
+        try {
+            await PhotoSession.ImportGalleryPhotoAsync(resolver, sourceUri);
+        } finally {
+            SetOperationState(SpecimenDetailsOperationState.Idle);
+        }
+    }
+
+    private async Task SaveCoreAsync()
+    {
+        bool databaseSaved = false;
+        try {
+            SpecimenDetail? specimen = SpecimenEditor.Specimen;
+            if (specimen == null) {
+                throw new InvalidOperationException("Specimen has not been loaded.");
+            }
+
+            string? oldPhotoUri = SpecimenEditor.IsNew ? null : specimen.PhotoUri;
+            string? savedPhotoUri = PhotoSession.PrepareForSave();
+            SpecimenEditor.UpdateDraft(DraftDisplayName, savedPhotoUri);
+            await SpecimenEditor.SaveAsync();
+            databaseSaved = true;
+
+            PhotoSession.Commit(savedPhotoUri, oldPhotoUri);
+            Mode = SpecimenDetailsMode.Read;
+            NotifyStateChanged();
+        } catch {
+            if (!databaseSaved) {
+                PhotoSession.RestorePreparedPhotoAfterFailure();
+            }
+
+            throw;
+        } finally {
+            SetOperationState(SpecimenDetailsOperationState.Idle);
+        }
+    }
+
+    private async Task<bool> DeleteCoreAsync(SpecimenDetail specimen)
+    {
+        try {
+            bool deleted = await SpecimenEditor.DeleteAsync();
+            if (deleted) {
+                PhotoStorage.DeleteOwnedFinalPhoto(specimen.PhotoUri);
+            }
+
+            return deleted;
+        } finally {
+            SetOperationState(SpecimenDetailsOperationState.Idle);
+        }
+    }
+
+    private void SetOperationState(SpecimenDetailsOperationState state)
+    {
+        OperationState = state;
+        NotifyStateChanged();
+
+        if (_cleared && state == SpecimenDetailsOperationState.Idle) {
+            PhotoSession.CleanupUncommittedPhotoFiles();
+        }
+    }
+
+    private void NotifyStateChanged()
+    {
+        StateChanged?.Invoke();
+    }
+}
+
 sealed class SpecimenDetailsFragment : Fragment
 {
     private const string ModeArgument = "mode";
     private const string SpecimenIdArgument = "specimen_id";
     private const string CollectionIdArgument = "collection_id";
-
     private enum ItemId { Edit = 1, Save = 2, Cancel = 3, Delete = 4, }
 
-    private Binding.fragment_specimen_details? _binding;
-    private SpecimenDetail? _specimen;
-    private bool _isBusy;
+    private enum PhotoAction
+    {
+        Gallery,
+        Camera,
+        Delete,
+    }
 
-    private SpecimenDetailsMode _mode;
-    private MainVerteId _newSpecimenCollectionId = MainVerteId.Invalid;
+    private Binding.fragment_specimen_details? _binding;
+    private SpecimenDetailsViewModel _viewModel = null!;
+
+    private Dialog? _photoFullscreenDialog;
+
+    private ActivityResultLauncher _galleryLauncher = null!;
+    private ActivityResultLauncher _cameraLauncher = null!;
+
+    private sealed class ResultCallback(Action<Java.Lang.Object?> callback)
+        : Java.Lang.Object, IActivityResultCallback
+    {
+        private readonly Action<Java.Lang.Object?> _callback = callback;
+
+        public void OnActivityResult(Java.Lang.Object? result) {
+            _callback(result);
+        }
+    }
 
     public static SpecimenDetailsFragment ForSpecimen(MainVerteId specimenId) {
         var fragment = new SpecimenDetailsFragment {
@@ -49,12 +315,22 @@ sealed class SpecimenDetailsFragment : Fragment
     }
 
     public override void OnCreate(Bundle? savedInstanceState) {
+        _galleryLauncher = RegisterForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+                                                     new ResultCallback(HandleGalleryResult));
+        _cameraLauncher = RegisterForActivityResult(new ActivityResultContracts.StartActivityForResult(),
+                                                    new ResultCallback(HandleCameraResult));
         base.OnCreate(savedInstanceState);
 
-        _mode = ReadModeArgument();
-        if (_mode == SpecimenDetailsMode.Create) {
-            _newSpecimenCollectionId = ReadIdArgument(CollectionIdArgument);
-        }
+        _viewModel = new ViewModelProvider(this)
+            .Get(Java.Lang.Class.FromType(typeof(SpecimenDetailsViewModel))) as SpecimenDetailsViewModel
+            ?? throw new InvalidOperationException("Could not create specimen details view model.");
+        _viewModel.StateChanged += HandleViewModelStateChanged;
+
+        SpecimenDetailsMode mode = ReadModeArgument();
+        MainVerteId id = ReadIdArgument(mode == SpecimenDetailsMode.Create
+                                        ? CollectionIdArgument
+                                        : SpecimenIdArgument);
+        _viewModel.Initialize(mode, id);
     }
 
     public override View OnCreateView(LayoutInflater inflater, ViewGroup? container, Bundle? savedInstanceState) {
@@ -73,12 +349,16 @@ sealed class SpecimenDetailsFragment : Fragment
         Require.NotNull(_binding);
 
         base.OnViewCreated(view, savedInstanceState);
-        if (_mode == SpecimenDetailsMode.Create) {
+        _binding!.specimen_photo_edit.Click += (_, _) => ShowPhotoActions();
+        _binding.specimen_image.Click += (_, _) => ShowPhotoFullscreen();
+        _binding.specimen_name_editor.TextChanged += HandleSpecimenNameTextChanged;
+
+        if (_viewModel.Mode == SpecimenDetailsMode.Create) {
             Render();
             return;
         }
 
-        _ = LoadSpecimenAsync(ReadIdArgument(SpecimenIdArgument));
+        _ = LoadSpecimenAsync();
     }
 
     public override void OnResume() {
@@ -86,58 +366,105 @@ sealed class SpecimenDetailsFragment : Fragment
         UpdateToolbar();
     }
 
-    public override void OnDestroyView() {
-        _binding = null;
+    private void HandleGalleryResult(Java.Lang.Object? result) {
+        var activityResult = result as ActivityResult;
+        if (activityResult == null || activityResult.ResultCode != (int)Result.Ok) {
+            return;
+        }
 
+        Intent? data = activityResult.Data;
+        AndroidUri? selectedUri = data?.Data;
+        if (selectedUri != null) {
+            _ = ImportGalleryPhotoAsync(selectedUri);
+        }
+    }
+
+    private void HandleCameraResult(Java.Lang.Object? result) {
+        var activityResult = result as ActivityResult;
+        if (activityResult == null) {
+            return;
+        }
+
+        CompleteCameraCapture(activityResult.ResultCode);
+    }
+
+    public override void OnDestroyView() {
+        ClosePhotoFullscreen();
+
+        if (_binding != null) {
+            _binding.specimen_name_editor.TextChanged -= HandleSpecimenNameTextChanged;
+        }
+
+        _binding = null;
         base.OnDestroyView();
     }
 
-    private async Task LoadSpecimenAsync(MainVerteId specimenId) {
+    public override void OnDestroy() {
+        _viewModel.StateChanged -= HandleViewModelStateChanged;
+        base.OnDestroy();
+    }
+
+    internal bool HandleBackNavigation() {
+        if (_viewModel.IsBusy()) {
+            return true;
+        }
+
+        if (_viewModel.OperationState == SpecimenDetailsOperationState.ImportingPhoto) {
+            CancelChanges();
+            return true;
+        }
+
+        if (_viewModel.Mode != SpecimenDetailsMode.Read) {
+            CancelChanges();
+            return true;
+        }
+
+        return false;
+    }
+
+    private async Task LoadSpecimenAsync() {
         Require.NotNull(_binding);
 
         try {
-            SpecimenDetail? specimen = await Services.Database.GetSpecimenAsync(specimenId);
-            if (_binding!.specimen_name == null || specimen == null) {
+            SpecimenDetail? specimen = await _viewModel.LoadAsync();
+            if (_binding == null || specimen == null) {
                 return;
             }
 
-            _specimen = specimen;
             Render();
         } catch (Exception ex) {
-            Log.Error(ex.ToString());
+            Log.Warn($"Could not load specimen details: {ex.Message}");
         }
     }
 
     private async Task DeleteSpecimenAsync() {
-        if (_isBusy) {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle) {
             return;
         }
 
-        SpecimenDetail? specimen = _specimen;
+        SpecimenDetail? specimen = _viewModel.SpecimenEditor.Specimen;
         if (specimen == null) {
             return;
         }
 
-        SetBusy(true);
         try {
-            bool deleted = await Services.Database.DeleteSpecimenAsync(specimen.Id);
+            bool deleted = await _viewModel.DeleteAsync();
             if (!deleted) {
                 return;
             }
 
-            _specimen = null;
             if (IsAdded) {
                 ParentFragmentManager.PopBackStack();
             }
         } catch (Exception ex) {
-            Log.Error(ex.ToString());
-        } finally {
-            SetBusy(false);
+            Log.Warn($"Could not delete specimen: {ex.Message}");
         }
     }
 
     private void DeleteSpecimen() {
-        if (_isBusy || _specimen == null || Activity == null) {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle
+            || _viewModel.SpecimenEditor.Specimen == null
+            || Activity == null) {
             return;
         }
 
@@ -151,93 +478,199 @@ sealed class SpecimenDetailsFragment : Fragment
     }
 
     private void EnterEditMode() {
-        if (_isBusy || _specimen == null) {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle
+            || _viewModel.SpecimenEditor.Specimen == null) {
             return;
         }
 
-        _mode = SpecimenDetailsMode.Edit;
-        Render();
-        UpdateToolbar();
+        _viewModel.EnterEditMode();
+    }
+
+    private void ShowPhotoActions() {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle
+            || _viewModel.Mode == SpecimenDetailsMode.Read
+            || Activity == null) {
+            return;
+        }
+
+        string[] labels;
+        PhotoAction[] actions;
+        if (_viewModel.PhotoSession.HasPhoto()) {
+            labels = [
+                GetString(Resource.String.specimen_photo_action_gallery),
+                GetString(Resource.String.specimen_photo_action_camera),
+                GetString(Resource.String.specimen_photo_action_delete),
+            ];
+
+            actions = [PhotoAction.Gallery, PhotoAction.Camera, PhotoAction.Delete];
+        } else {
+            labels = [
+                GetString(Resource.String.specimen_photo_action_gallery),
+                GetString(Resource.String.specimen_photo_action_camera),
+            ];
+
+            actions = [PhotoAction.Gallery, PhotoAction.Camera];
+        }
+
+        AlertDialog.Builder builder = new(Activity);
+        builder.SetTitle(Resource.String.specimen_photo_action_title);
+        builder.SetItems(labels, (_, args) => ExecutePhotoAction(actions[args.Which]));
+        builder.SetNegativeButton(Resource.String.toolbar_menu_action_cancel, (_, _) => { });
+        builder.Show();
+    }
+
+    private void ExecutePhotoAction(PhotoAction action) {
+        switch (action) {
+        case PhotoAction.Gallery: StartGalleryPicker();                   break;
+        case PhotoAction.Camera:  LaunchCamera();                         break;
+        case PhotoAction.Delete:  RemovePhotoFromDraft();                 break;
+        default:                  Log.Error($"Unknown action: {action}"); break;
+        }
+    }
+
+    private void StartGalleryPicker() {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle) {
+            return;
+        }
+
+        Context context = RequireContext();
+        PackageManager? packageManager = context.PackageManager;
+        if (packageManager == null) {
+            ShowToast(Resource.String.specimen_photo_selection_failed);
+            return;
+        }
+
+        Intent? picker = null;
+        if (Build.VERSION.SdkInt >= BuildVersionCodes.Tiramisu) {
+            Intent photoPicker = new("android.provider.action.PICK_IMAGES");
+            if (photoPicker.ResolveActivity(packageManager) != null) {
+                picker = photoPicker;
+            }
+        }
+
+        if (picker == null) {
+            picker = new Intent(Intent.ActionOpenDocument);
+            picker.AddCategory(Intent.CategoryOpenable);
+        }
+
+        picker.SetType("image/*");
+        picker.AddFlags(AndroidActivityFlags.GrantReadUriPermission);
+        if (picker.ResolveActivity(packageManager) == null) {
+            ShowToast(Resource.String.specimen_photo_selection_failed);
+            return;
+        }
+
+        _galleryLauncher.Launch(picker);
+    }
+
+    private async Task ImportGalleryPhotoAsync(AndroidUri sourceUri) {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle) {
+            return;
+        }
+
+        try {
+            ContentResolver? resolver = RequireContext().ContentResolver;
+            if (resolver == null) {
+                throw new InvalidOperationException("The content resolver is unavailable.");
+            }
+
+            await _viewModel.ImportGalleryPhotoAsync(resolver, sourceUri);
+        } catch (System.OperationCanceledException) {
+            // Cancellation is expected when the fragment view is left during the copy.
+        } catch (Exception ex) {
+            Log.Warn($"Could not import selected photo: {ex.Message}");
+            ShowToast(Resource.String.specimen_photo_selection_failed);
+        }
+
+        RenderPhoto();
+    }
+
+    private void LaunchCamera() {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle) {
+            return;
+        }
+
+        Context context = RequireContext();
+        PackageManager? packageManager = context.PackageManager;
+        if (packageManager == null) {
+            ShowToast(Resource.String.specimen_photo_camera_unavailable);
+            return;
+        }
+
+        Intent camera = new(MediaStore.ActionImageCapture);
+        if (camera.ResolveActivity(packageManager) == null) {
+            ShowToast(Resource.String.specimen_photo_camera_unavailable);
+            return;
+        }
+
+        try {
+            AndroidUri outputUri = _viewModel.PhotoSession.BeginCameraCapture();
+            camera.PutExtra(MediaStore.ExtraOutput, outputUri);
+            camera.AddFlags(AndroidActivityFlags.GrantReadUriPermission | AndroidActivityFlags.GrantWriteUriPermission);
+            _cameraLauncher.Launch(camera);
+        } catch (Exception ex) {
+            Log.Warn($"Could not start camera capture: {ex.Message}");
+            _viewModel.PhotoSession.CancelCameraCapture();
+
+            ShowToast(Resource.String.specimen_photo_camera_unavailable);
+        }
+    }
+
+    private void CompleteCameraCapture(int resultCode) {
+        PhotoCaptureResult captureResult = _viewModel.PhotoSession.CompleteCameraCapture(resultCode == (int)Result.Ok);
+        if (captureResult == PhotoCaptureResult.Failed) {
+            ShowToast(Resource.String.specimen_photo_capture_failed);
+        }
+
+        if (captureResult == PhotoCaptureResult.Succeeded) {
+            RenderPhoto();
+        }
+    }
+
+    private void RemovePhotoFromDraft() {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle) {
+            return;
+        }
+
+        _viewModel.RemovePhoto();
     }
 
     private async Task SaveAsync() {
-        if (_isBusy || _binding == null) {
+        if (_viewModel.OperationState != SpecimenDetailsOperationState.Idle || _binding == null) {
             return;
         }
 
         string displayName = _binding.specimen_name_editor.Text?.Trim() ?? String.Empty;
         if (displayName.Length == 0) {
-            _binding.specimen_name_editor?.Error = GetString(Resource.String.specimen_detail_name_mandatory);
-
+            _binding.specimen_name_editor.Error = GetString(Resource.String.specimen_detail_name_mandatory);
             return;
         }
 
-        SetBusy(true);
+        _viewModel.SetDraftDisplayName(displayName);
         try {
-            if (_mode == SpecimenDetailsMode.Create) {
-                MainVerteId collectionId = _newSpecimenCollectionId;
-                if (collectionId == MainVerteId.Invalid) {
-                    throw new InvalidOperationException("Missing collection identifier for specimen creation.");
-                }
-
-                MainVerteId id = await Services.Database.CreateSpecimenAsync(new SpecimenDetail(
-                    MainVerteId.Invalid,
-                    collectionId,
-                    null,
-                    null,
-                    null,
-                    displayName,
-                    null,
-                    null,
-                    0,
-                    0
-                ));
-                _mode = SpecimenDetailsMode.Read;
-                _specimen = await Services.Database.GetSpecimenAsync(id);
-            } else {
-                SpecimenDetail? specimen = _specimen;
-                if (specimen == null) {
-                    throw new InvalidOperationException("Specimen has not been loaded.");
-                }
-
-                bool updated = await Services.Database.UpdateSpecimenAsync(specimen with {
-                    DisplayName = displayName,
-                });
-
-                if (!updated) {
-                    throw new InvalidOperationException("Specimen no longer exists.");
-                }
-
-                _specimen = await Services.Database.GetSpecimenAsync(specimen.Id);
-                _mode = SpecimenDetailsMode.Read;
-            }
-
-            if (_binding.specimen_name == null) {
-                return;
-            }
-
-            Render();
-            UpdateToolbar();
+            await _viewModel.SaveAsync();
         } catch (Exception ex) {
-            Log.Error(ex.ToString());
-        } finally {
-            SetBusy(false);
+            Log.Warn($"Could not save specimen: {ex.Message}");
+            ShowToast(Resource.String.specimen_save_failed);
+            RenderPhoto();
         }
     }
 
     private void CancelChanges() {
-        if (_isBusy) {
+        if (_viewModel.IsBusy()) {
             return;
         }
 
-        if (_mode == SpecimenDetailsMode.Create) {
-            ParentFragmentManager.PopBackStack();
+        SpecimenDetailsMode mode = _viewModel.Mode;
+        if (!_viewModel.CancelChanges()) {
             return;
         }
 
-        _mode = SpecimenDetailsMode.Read;
-        Render();
-        UpdateToolbar();
+        if (mode == SpecimenDetailsMode.Create) {
+            if (IsAdded) {
+                ParentFragmentManager.PopBackStack();
+            }
+        }
     }
 
     private void Render() {
@@ -245,44 +678,128 @@ sealed class SpecimenDetailsFragment : Fragment
             return;
         }
 
-        if (_mode == SpecimenDetailsMode.Create) {
-            _binding.specimen_name.Text        = String.Empty;
-            _binding.specimen_name_editor.Text = String.Empty;
-            _binding.specimen_species.Text     = GetString(Resource.String.specimen_details_unknown_species);
-            _binding.specimen_image.SetImageDrawable(null);
-        } else if (_specimen != null) {
-            _binding.specimen_name.Text        = _specimen.DisplayName;
-            _binding.specimen_name_editor.Text = _specimen.DisplayName;
-            _binding.specimen_species.Text     = _specimen.Species ?? GetString(Resource.String.specimen_details_unknown_species);
-            if (String.IsNullOrEmpty(_specimen.PhotoUri)) {
-                _binding.specimen_image.SetImageDrawable(null);
-            } else {
-                _binding.specimen_image.SetImageURI(Android.Net.Uri.Parse(_specimen.PhotoUri));
-            }
+        if (_viewModel.Mode == SpecimenDetailsMode.Create) {
+            _binding.specimen_name.Text = String.Empty;
+            _binding.specimen_name_editor.Text = _viewModel.DraftDisplayName;
+            _binding.specimen_species.Text = GetString(Resource.String.specimen_details_unknown_species);
+        } else if (_viewModel.SpecimenEditor.Specimen != null) {
+            _binding.specimen_name.Text = _viewModel.SpecimenEditor.Specimen.DisplayName;
+            _binding.specimen_name_editor.Text = _viewModel.DraftDisplayName;
+            _binding.specimen_species.Text = _viewModel.SpecimenEditor.Specimen.Species
+                ?? GetString(Resource.String.specimen_details_unknown_species);
         }
 
-        bool isWriting = _mode != SpecimenDetailsMode.Read;
-        _binding.specimen_name.Visibility        = isWriting ? ViewStates.Gone    : ViewStates.Visible;
+        RenderPhoto();
+        bool isWriting = _viewModel.Mode != SpecimenDetailsMode.Read;
+        _binding.specimen_name.Visibility = isWriting ? ViewStates.Gone : ViewStates.Visible;
         _binding.specimen_name_editor.Visibility = isWriting ? ViewStates.Visible : ViewStates.Gone;
-        _binding.specimen_name_editor.Enabled = isWriting;
+        _binding.specimen_photo_edit.Visibility = isWriting ? ViewStates.Visible : ViewStates.Gone;
+        _binding.specimen_name_editor.Enabled = isWriting
+            && _viewModel.OperationState == SpecimenDetailsOperationState.Idle;
+        _binding.specimen_photo_edit.Enabled = isWriting
+            && _viewModel.OperationState == SpecimenDetailsOperationState.Idle;
+        _binding.operation_progress.Visibility = _viewModel.OperationState == SpecimenDetailsOperationState.Idle
+            ? ViewStates.Gone
+            : ViewStates.Visible;
     }
 
-    private void SetBusy(bool busy) {
-        _isBusy = busy;
+    private void RenderPhoto() {
+        if (_binding == null) {
+            return;
+        }
 
+        AndroidUri? photoUri = _viewModel.PhotoSession.GetDisplayUri();
+
+        if (photoUri == null) {
+            _binding.specimen_image.SetImageDrawable(null);
+            _binding.specimen_photo_placeholder.Visibility = ViewStates.Visible;
+        } else {
+            _binding.specimen_image.SetImageURI(photoUri);
+            _binding.specimen_photo_placeholder.Visibility = ViewStates.Gone;
+        }
+    }
+
+    private void ShowPhotoFullscreen() {
+        if (_viewModel.Mode != SpecimenDetailsMode.Read
+            || _viewModel.OperationState != SpecimenDetailsOperationState.Idle
+            || _photoFullscreenDialog != null) {
+            return;
+        }
+
+        AndroidUri? photoUri = _viewModel.PhotoSession.GetDisplayUri();
+        if (photoUri == null || Context == null) {
+            return;
+        }
+
+        Dialog dialog = new(Context);
+        ImageView image = new(Context) {
+            LayoutParameters = new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MatchParent,
+                ViewGroup.LayoutParams.MatchParent),
+        };
+        image.SetScaleType(ImageView.ScaleType.FitCenter);
+        image.SetBackgroundColor(Color.Black);
+        image.SetImageURI(photoUri);
+        image.Click += (_, _) => dialog.Dismiss();
+
+        dialog.SetContentView(image);
+        dialog.SetCancelable(true);
+        dialog.DismissEvent += (_, _) => {
+            if (ReferenceEquals(_photoFullscreenDialog, dialog)) {
+                _photoFullscreenDialog = null;
+            }
+        };
+
+        _photoFullscreenDialog = dialog;
+        dialog.Show();
+
+        Window? window = dialog.Window;
+        if (window == null) {
+            return;
+        }
+
+        window.SetBackgroundDrawable(new ColorDrawable(Color.Black));
+        window.AddFlags(WindowManagerFlags.Fullscreen);
+        window.SetLayout(ViewGroup.LayoutParams.MatchParent, ViewGroup.LayoutParams.MatchParent);
+    }
+
+    private void ClosePhotoFullscreen() {
+        Dialog? dialog = _photoFullscreenDialog;
+        _photoFullscreenDialog = null;
+        if (dialog != null) {
+            dialog.Dismiss();
+        }
+    }
+
+    private void HandleViewModelStateChanged() {
         if (_binding != null) {
-            _binding.operation_progress.Visibility = busy ? ViewStates.Visible : ViewStates.Gone;
-            _binding.specimen_name_editor.Enabled = !busy && _mode != SpecimenDetailsMode.Read;
+            Render();
         }
 
         UpdateToolbar();
     }
 
+    private void HandleSpecimenNameTextChanged(object? sender, Android.Text.TextChangedEventArgs args) {
+        _viewModel.SetDraftDisplayName(args.Text?.ToString() ?? String.Empty);
+    }
+
+    private void ShowToast(int resourceId) {
+        Context? context = Context;
+        if (context == null) {
+            return;
+        }
+
+        var toast = Toast.MakeText(context, resourceId, ToastLength.Short);
+        if (toast != null) {
+            toast.Show();
+        }
+    }
+
     private void UpdateToolbar() {
         if (Activity is MainActivity activity) {
             ToolbarMenuAction[] actions = Array.Empty<ToolbarMenuAction>();
-            if (!_isBusy) {
-                switch(_mode) {
+            if (_viewModel.OperationState == SpecimenDetailsOperationState.Idle) {
+                switch(_viewModel.Mode) {
                 case SpecimenDetailsMode.Read:
                     actions = [
                         new ToolbarMenuAction((int)ItemId.Delete,
@@ -313,7 +830,7 @@ sealed class SpecimenDetailsFragment : Fragment
                 }
             }
 
-            activity.ConfigureToolbar(new ToolbarConfiguration(GetToolbarTitleResource(_mode), true), actions);
+            activity.ConfigureToolbar(new ToolbarConfiguration(GetToolbarTitleResource(_viewModel.Mode), true), actions);
         }
     }
 
@@ -329,7 +846,7 @@ sealed class SpecimenDetailsFragment : Fragment
     private SpecimenDetailsMode ReadModeArgument() {
         int? mode = Arguments?.GetInt(ModeArgument, (int)SpecimenDetailsMode.Read);
         if (mode == null || !Enum.IsDefined(typeof(SpecimenDetailsMode), mode)) {
-            Log.Warn($"SpecimenDetail Invalid mode value");
+            Log.Warn("SpecimenDetail Invalid mode value");
             mode = (int)SpecimenDetailsMode.Read;
         }
 

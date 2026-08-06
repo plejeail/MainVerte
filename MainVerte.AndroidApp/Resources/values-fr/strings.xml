@@ -12,6 +12,17 @@
     <string name="specimen_detail_title_read">Spécimen</string>
     <string name="specimen_details_name_editor_hint">Nom du spécimen</string>
     <string name="specimen_details_unknown_species">Espèce inconnue</string>
+    <string name="specimen_photo_content_description">Photo du spécimen</string>
+    <string name="specimen_photo_placeholder">Aucune photo</string>
+    <string name="specimen_photo_edit">Modifier la photo</string>
+    <string name="specimen_photo_action_title">Photo</string>
+    <string name="specimen_photo_action_gallery">Galerie</string>
+    <string name="specimen_photo_action_camera">Appareil photo</string>
+    <string name="specimen_photo_action_delete">Supprimer la photo</string>
+    <string name="specimen_photo_camera_unavailable">Aucune application d’appareil photo n’est disponible.</string>
+    <string name="specimen_photo_selection_failed">La photo n’a pas pu être importée.</string>
+    <string name="specimen_photo_capture_failed">La prise de photo a échoué.</string>
+    <string name="specimen_save_failed">Le spécimen n’a pas pu être enregistré.</string>
     <string name="toolbar_menu_action_cancel">Annuler</string>
     <string name="toolbar_menu_action_delete">Supprimer</string>
     <string name="toolbar_menu_action_edit">Modifier</string>

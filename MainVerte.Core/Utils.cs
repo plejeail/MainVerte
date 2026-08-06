@@ -5,7 +5,6 @@
 //! Toolbox that may be used anywhere, unrelated to MainVerte.
 //! ---------------------------------------------------------------------------
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
 namespace MainVerte.Core;
@@ -13,21 +12,27 @@ namespace MainVerte.Core;
 
 public static class Require
 {
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void True(bool condition, [CallerArgumentExpression(nameof(condition))] string? expression = null) {
         if (!condition) {
             Debug.Fail($"Precondition failed: {expression}");
         }
     }
 
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void NotNull<T>(T? value, [CallerArgumentExpression(nameof(value))] string? expression = null) {
         if (value == null) {
             Debug.Fail($"Precondition failed: {expression} is null");
         }
     }
 
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void NotEmpty(string? value,
                                 [CallerArgumentExpression(nameof(value))] string? expression = null)
     {
@@ -36,7 +41,9 @@ public static class Require
         }
     }
 
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void NotEmpty<T>(IReadOnlyCollection<T>? value,
                                    [CallerArgumentExpression(nameof(value))] string? expression = null)
     {
@@ -49,22 +56,27 @@ public static class Require
 
 public static class Ensure
 {
-
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void True(bool condition, [CallerArgumentExpression(nameof(condition))] string? expression = null) {
         if (!condition) {
             Debug.Fail($"Postcondition failed: {expression}");
         }
     }
 
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void NotNull<T>(T? value, [CallerArgumentExpression(nameof(value))] string? expression = null) {
         if (value == null) {
             Debug.Fail($"Postcondition failed: {expression} is null");
         }
     }
 
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void NotEmpty(string? value,
                                 [CallerArgumentExpression(nameof(value))] string? expression = null)
     {
@@ -73,7 +85,9 @@ public static class Ensure
         }
     }
 
+    [StackTraceHidden]
     [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     public static void NotEmpty<T>(IReadOnlyCollection<T>? value,
                                    [CallerArgumentExpression(nameof(value))] string? expression = null)
     {
@@ -86,18 +100,22 @@ public static class Ensure
 
 public static class Log
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Info(string message) {
         Platform.LogInfo(message);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Verbose(string message) {
         Platform.LogVerbose(message);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Debug(string message) {
         Platform.LogDebug(message);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Warn(string message) {
         Platform.LogWarning(message);
     }

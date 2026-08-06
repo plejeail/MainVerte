@@ -111,12 +111,13 @@ sealed class SpecimenViewHolder : RecyclerView.ViewHolder
     }
 
     public void Bind(SpecimenSummary specimen) {
-        Id = specimen.id;
+        Id = specimen.Id;
         _binding.specimen_name.Text = specimen.Name;
         _binding.specimen_species.Text = specimen.Species;
 
-        if (specimen.PhotoUri is string photoUri && photoUri.Length > 0) {
-            _binding.specimen_image.SetImageURI(Android.Net.Uri.Parse(photoUri));
+        Android.Net.Uri? photoUri = PhotoStorage.GetDisplayUri(specimen.PhotoUri);
+        if (photoUri != null) {
+            _binding.specimen_image.SetImageURI(photoUri);
         } else {
             _binding.specimen_image.SetImageDrawable(null);
         }
