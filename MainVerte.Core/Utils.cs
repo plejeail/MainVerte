@@ -52,6 +52,15 @@ public static class Require
             Debug.Fail($"Precondition failed: {expression} must not be empty.");
         }
     }
+
+    [StackTraceHidden]
+    [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void IsInRange<TEnum>(TEnum value) where TEnum : Enum {
+        if (!Enum.IsDefined(typeof(TEnum), value)) {
+            Debug.Fail($"Postcondition failed: {value} must be a valid value of {typeof(TEnum)}.");
+        }
+    }
 }
 
 public static class Ensure
@@ -81,7 +90,7 @@ public static class Ensure
                                 [CallerArgumentExpression(nameof(value))] string? expression = null)
     {
         if (String.IsNullOrEmpty(value)) {
-            Debug.Fail($"Precondition failed: {expression} must not be null or empty.");
+            Debug.Fail($"Postcondition failed: {expression} must not be null or empty.");
         }
     }
 
@@ -93,7 +102,16 @@ public static class Ensure
     {
         NotNull(value);
         if (value!.Count == 0) {
-            Debug.Fail($"Precondition failed: {expression} must not be empty.");
+            Debug.Fail($"Postcondition failed: {expression} must not be empty.");
+        }
+    }
+
+    [StackTraceHidden]
+    [Conditional("DEBUG")]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public static void IsInRange<TEnum>(TEnum value) where TEnum : Enum {
+        if (!Enum.IsDefined(typeof(TEnum), value)) {
+            Debug.Fail($"Postcondition failed: {value} must be a valid value of {typeof(TEnum)}.");
         }
     }
 }

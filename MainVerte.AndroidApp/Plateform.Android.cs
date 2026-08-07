@@ -1,33 +1,78 @@
-﻿using System;
+using System;
 using Android.App;
+using Android.Graphics;
+using Android.Views;
+using AndroidX.Core.Content;
+using Google.Android.Material.Snackbar;
 using MainVerte.Core;
 
 namespace MainVerte.AndroidApp;
 
+static class Feedback
+{
+    public static void Send(Activity activity, string message, UserFeedbackKind kind) {
+        if (activity.IsFinishing || activity.IsDestroyed) {
+            return;
+        }
+
+        activity.RunOnUiThread(() => {
+            if (activity.IsFinishing || activity.IsDestroyed) {
+                return;
+            }
+
+            View? content = activity.FindViewById(Android.Resource.Id.Content);
+            if (content == null) {
+                return;
+            }
+
+            var snackbar = Snackbar.Make(content, message, Snackbar.LengthLong);
+            snackbar.View.Clickable = true;
+            snackbar.View.Click += (_, _) => snackbar.Dismiss();
+            snackbar.View.SetBackgroundColor(GetFeedbackColor(activity, kind));
+            snackbar.Show();
+        });
+    }
+
+    private static Color GetFeedbackColor(Activity activity, UserFeedbackKind kind) {
+        Require.IsInRange(kind);
+
+        int colorResource = Resource.Color.feedback_info;
+        switch (kind) {
+        case UserFeedbackKind.Success: colorResource = Resource.Color.feedback_success; break;
+        case UserFeedbackKind.Failure: colorResource = Resource.Color.feedback_failure; break;
+        case UserFeedbackKind.Info:    colorResource = Resource.Color.feedback_info;    break;
+        case UserFeedbackKind.Warning: colorResource = Resource.Color.feedback_warning; break;
+        }
+
+        return new Color(ContextCompat.GetColor(activity, colorResource));
+    }
+}
 
 sealed class AndroidPlatform : IPlatform
 {
-    public void LogError(string message) {
-        Android.Util.Log.Error("MainVerte", message);
+    private readonly WeakReference<Activity> _activity;
+
+    public AndroidPlatform(Activity activity) {
+        Require.NotNull(activity);
+        _activity = new WeakReference<Activity>(activity);
     }
 
-    public void LogWarning(string message) {
-        Android.Util.Log.Warn("MainVerte", message);
-    }
-
-    public void LogInfo(string message) {
-        Android.Util.Log.Info("MainVerte", message);
-    }
-
-    public void LogVerbose(string message) {
-        Android.Util.Log.Verbose("MainVerte", message);
-    }
-
-    public void LogDebug(string message) {
-        Android.Util.Log.Debug("MainVerte", message);
+    public void LogMessage(string message, LogLevel level) {
+        switch (level) {
+        case LogLevel.Debug:   Android.Util.Log.Debug("MainVerte", message); break;
+        case LogLevel.Info:    Android.Util.Log.Info("MainVerte", message);  break;
+        case LogLevel.Warning: Android.Util.Log.Warn("MainVerte", message);  break;
+        case LogLevel.Error:   Android.Util.Log.Error("MainVerte", message); break;
+        }
     }
 
     public string ApplicationPath() {
         return Application.Context.FilesDir?.AbsolutePath ?? String.Empty;
+    }
+
+    public void UserFeedback(string message, UserFeedbackKind kind) {
+        if (_activity.TryGetTarget(out Activity? activity)) {
+            Feedback.Send(activity, message, kind);
+        }
     }
 }

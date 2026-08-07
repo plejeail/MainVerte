@@ -473,7 +473,12 @@ sealed class SpecimenDetailsFragment : Fragment
         builder.SetMessage(Resource.String.specimen_detail_delete_confirmation_message);
         builder.SetNegativeButton(Resource.String.specimen_detail_delete_confirmation_no, (_, _) => { });
         builder.SetPositiveButton(Resource.String.specimen_detail_delete_confirmation_yes,
-                                  (_, _) => _ = DeleteSpecimenAsync());
+                                  (_, _) => {
+                                      _ = DeleteSpecimenAsync();
+                                      if (Activity != null) {
+                                          Feedback.Send(Activity, GetString(Resource.String.specimen_detail_delete_confirmation_yes), UserFeedbackKind.Success);
+                                      }
+                                  });
         builder.Show();
     }
 
@@ -536,7 +541,10 @@ sealed class SpecimenDetailsFragment : Fragment
         Context context = RequireContext();
         PackageManager? packageManager = context.PackageManager;
         if (packageManager == null) {
-            ShowToast(Resource.String.specimen_photo_selection_failed);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), UserFeedbackKind.Failure);
+            }
+
             return;
         }
 
@@ -556,7 +564,9 @@ sealed class SpecimenDetailsFragment : Fragment
         picker.SetType("image/*");
         picker.AddFlags(AndroidActivityFlags.GrantReadUriPermission);
         if (picker.ResolveActivity(packageManager) == null) {
-            ShowToast(Resource.String.specimen_photo_selection_failed);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), UserFeedbackKind.Failure);
+            }
             return;
         }
 
@@ -579,7 +589,9 @@ sealed class SpecimenDetailsFragment : Fragment
             // Cancellation is expected when the fragment view is left during the copy.
         } catch (Exception ex) {
             Log.Warn($"Could not import selected photo: {ex.Message}");
-            ShowToast(Resource.String.specimen_photo_selection_failed);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), UserFeedbackKind.Failure);
+            }
         }
 
         RenderPhoto();
@@ -593,13 +605,19 @@ sealed class SpecimenDetailsFragment : Fragment
         Context context = RequireContext();
         PackageManager? packageManager = context.PackageManager;
         if (packageManager == null) {
-            ShowToast(Resource.String.specimen_photo_camera_unavailable);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), UserFeedbackKind.Failure);
+            }
+
             return;
         }
 
         Intent camera = new(MediaStore.ActionImageCapture);
         if (camera.ResolveActivity(packageManager) == null) {
-            ShowToast(Resource.String.specimen_photo_camera_unavailable);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), UserFeedbackKind.Failure);
+            }
+
             return;
         }
 
@@ -612,14 +630,18 @@ sealed class SpecimenDetailsFragment : Fragment
             Log.Warn($"Could not start camera capture: {ex.Message}");
             _viewModel.PhotoSession.CancelCameraCapture();
 
-            ShowToast(Resource.String.specimen_photo_camera_unavailable);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), UserFeedbackKind.Failure);
+            }
         }
     }
 
     private void CompleteCameraCapture(int resultCode) {
         PhotoCaptureResult captureResult = _viewModel.PhotoSession.CompleteCameraCapture(resultCode == (int)Result.Ok);
         if (captureResult == PhotoCaptureResult.Failed) {
-            ShowToast(Resource.String.specimen_photo_capture_failed);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_capture_failed), UserFeedbackKind.Failure);
+            }
         }
 
         if (captureResult == PhotoCaptureResult.Succeeded) {
@@ -642,16 +664,25 @@ sealed class SpecimenDetailsFragment : Fragment
 
         string displayName = _binding.specimen_name_editor.Text?.Trim() ?? String.Empty;
         if (displayName.Length == 0) {
-            _binding.specimen_name_editor.Error = GetString(Resource.String.specimen_detail_name_mandatory);
+            _binding.specimen_name_editor.Error = GetString(Resource.String.specimen_detail_mandatory);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_detail_name_mandatory), UserFeedbackKind.Failure);
+            }
+
             return;
         }
 
         _viewModel.SetDraftDisplayName(displayName);
         try {
             await _viewModel.SaveAsync();
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_save_success), UserFeedbackKind.Success);
+            }
         } catch (Exception ex) {
             Log.Warn($"Could not save specimen: {ex.Message}");
-            ShowToast(Resource.String.specimen_save_failed);
+            if (Activity != null) {
+                Feedback.Send(Activity, GetString(Resource.String.specimen_save_failed), UserFeedbackKind.Failure);
+            }
             RenderPhoto();
         }
     }
@@ -781,18 +812,6 @@ sealed class SpecimenDetailsFragment : Fragment
 
     private void HandleSpecimenNameTextChanged(object? sender, Android.Text.TextChangedEventArgs args) {
         _viewModel.SetDraftDisplayName(args.Text?.ToString() ?? String.Empty);
-    }
-
-    private void ShowToast(int resourceId) {
-        Context? context = Context;
-        if (context == null) {
-            return;
-        }
-
-        var toast = Toast.MakeText(context, resourceId, ToastLength.Short);
-        if (toast != null) {
-            toast.Show();
-        }
     }
 
     private void UpdateToolbar() {

@@ -34,6 +34,9 @@ static class Services
     }
 }
 
+sealed record ToolbarConfiguration(int TitleResourceId, bool ShowBackButton);
+sealed record ToolbarMenuAction(int Id, string Title, int IconResourceId, Action Execute);
+
 [Activity(Label = "@string/app_name",
           MainLauncher = true,
           Theme =  "@style/MainVerteTheme")]
@@ -42,10 +45,10 @@ sealed class MainActivity : AppCompatActivity
     private Binding.activity_main? _binding;
     private ToolbarMenuAction[] _toolbarActions = Array.Empty<ToolbarMenuAction>();
 
-    protected override void OnCreate(Bundle? savedInstanceState)
-    {
+    protected override void OnCreate(Bundle? savedInstanceState) {
+        Platform.SetImplementation(new AndroidPlatform(this));
+
         if (!Services.Initialized) { // Run once
-            Platform.SetImplementation(new AndroidPlatform());
             CrashReport.ProcessPending();
 
             // Catch unhandled exceptions
@@ -70,13 +73,11 @@ sealed class MainActivity : AppCompatActivity
         }
     }
 
-    public override bool OnSupportNavigateUp()
-    {
+    public override bool OnSupportNavigateUp() {
         return HandleBackNavigation();
     }
 
-    private bool HandleBackNavigation()
-    {
+    private bool HandleBackNavigation() {
         AndroidX.Fragment.App.Fragment? currentFragment = SupportFragmentManager.FindFragmentById(Resource.Id.main_fragment_container);
         if (currentFragment is SpecimenDetailsFragment specimenDetails
             && specimenDetails.HandleBackNavigation()) {
@@ -95,8 +96,7 @@ sealed class MainActivity : AppCompatActivity
     {
         private readonly MainActivity _activity = activity;
 
-        public override void HandleOnBackPressed()
-        {
+        public override void HandleOnBackPressed() {
             if (_activity.HandleBackNavigation()) {
                 return;
             }
@@ -126,8 +126,7 @@ sealed class MainActivity : AppCompatActivity
                               .Commit();
     }
 
-    internal void ConfigureToolbar(ToolbarConfiguration toolbar, ToolbarMenuAction[]? actions = null)
-    {
+    internal void ConfigureToolbar(ToolbarConfiguration toolbar, ToolbarMenuAction[]? actions = null) {
         Require.NotNull(SupportActionBar);
 
         SupportActionBar!.Title = GetString(toolbar.TitleResourceId);
@@ -136,8 +135,7 @@ sealed class MainActivity : AppCompatActivity
         InvalidateOptionsMenu();
     }
 
-    private static void ConfigureToolbarInsets(View toolbar)
-    {
+    private static void ConfigureToolbarInsets(View toolbar) {
         ToolbarInsetsListener listener = new(toolbar.PaddingLeft,
                                              toolbar.PaddingTop,
                                              toolbar.PaddingRight,
@@ -152,15 +150,11 @@ sealed class MainActivity : AppCompatActivity
         int paddingRight,
         int paddingBottom) : Java.Lang.Object, View.IOnApplyWindowInsetsListener
     {
-        public WindowInsets OnApplyWindowInsets(View view, WindowInsets insets)
-        {
+        public WindowInsets OnApplyWindowInsets(View view, WindowInsets insets) {
             int topInset;
-            if (OperatingSystem.IsAndroidVersionAtLeast(30))
-            {
+            if (OperatingSystem.IsAndroidVersionAtLeast(30)) {
                 topInset = insets.GetInsets(WindowInsets.Type.SystemBars()).Top;
-            }
-            else
-            {
+            } else {
                 topInset = insets.SystemWindowInsetTop;
             }
 
@@ -214,6 +208,3 @@ sealed class MainActivity : AppCompatActivity
         CrashReport.Write(e.Exception);
     }
 }
-
-sealed record ToolbarConfiguration(int TitleResourceId, bool ShowBackButton);
-sealed record ToolbarMenuAction(int Id, string Title, int IconResourceId, Action Execute);
