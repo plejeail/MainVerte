@@ -16,11 +16,32 @@ namespace MainVerte.Core;
 
 public interface IPlatform
 {
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="message"></param>
     public void LogError(string message);
+
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="message"></param>
     public void LogWarning(string message);
+
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="message"></param>
     public void LogInfo(string message);
-    public void LogVerbose(string message);
+
+    /// <summary>
+    ///
+    /// </summary>
+    /// <param name="message"></param>
     public void LogDebug(string message);
+
+    /// <summary> Get the path to the application data files</summary>
+    /// <returns></returns>
     public string ApplicationPath();
 }
 
@@ -36,10 +57,6 @@ sealed class DefaultPlatform : IPlatform
 
     public void LogInfo(string message) {
         Console.WriteLine($"INF: MainVerte: {message}");
-    }
-
-    public void LogVerbose(string message) {
-        Console.WriteLine($"VER: MainVerte: {message}");
     }
 
     public void LogDebug(string message) {
@@ -64,11 +81,6 @@ public static class Platform
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void LogInfo(string message) {
         _platform.LogInfo(message);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal static void LogVerbose(string message) {
-        _platform.LogVerbose(message);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

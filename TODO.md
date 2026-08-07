@@ -6,4 +6,3 @@ journaling: events / journals / custom events
 import/export: export collection / journals
 care: alarms / notifications / care events / care triggers (watering, turning pot, ppfd, etc)
 internal notifications system: store notifs, display them, acknowledge them, optional callbackg trigger (ui)
-fix padding top: top padding display a white rectangle. It should be the same color as the toolbar background

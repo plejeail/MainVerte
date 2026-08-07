@@ -106,11 +106,6 @@ public static class Log
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static void Verbose(string message) {
-        Platform.LogVerbose(message);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static void Debug(string message) {
         Platform.LogDebug(message);
     }

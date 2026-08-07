@@ -62,6 +62,7 @@ sealed class MainActivity : AppCompatActivity
         SetContentView(Resource.Layout.activity_main);
 
         _binding = new Binding.activity_main(FindViewById(Android_Resource.Id.Content)!);
+        ConfigureToolbarInsets(_binding.main_toolbar);
         SetSupportActionBar(_binding.main_toolbar);
 
         if (savedInstanceState == null) {
@@ -133,6 +134,42 @@ sealed class MainActivity : AppCompatActivity
         SupportActionBar!.SetDisplayHomeAsUpEnabled(toolbar.ShowBackButton);
         _toolbarActions = actions ?? Array.Empty<ToolbarMenuAction>();
         InvalidateOptionsMenu();
+    }
+
+    private static void ConfigureToolbarInsets(View toolbar)
+    {
+        ToolbarInsetsListener listener = new(toolbar.PaddingLeft,
+                                             toolbar.PaddingTop,
+                                             toolbar.PaddingRight,
+                                             toolbar.PaddingBottom);
+        toolbar.SetOnApplyWindowInsetsListener(listener);
+        toolbar.RequestApplyInsets();
+    }
+
+    private sealed class ToolbarInsetsListener(
+        int paddingLeft,
+        int paddingTop,
+        int paddingRight,
+        int paddingBottom) : Java.Lang.Object, View.IOnApplyWindowInsetsListener
+    {
+        public WindowInsets OnApplyWindowInsets(View view, WindowInsets insets)
+        {
+            int topInset;
+            if (OperatingSystem.IsAndroidVersionAtLeast(30))
+            {
+                topInset = insets.GetInsets(WindowInsets.Type.SystemBars()).Top;
+            }
+            else
+            {
+                topInset = insets.SystemWindowInsetTop;
+            }
+
+            view.SetPadding(paddingLeft,
+                            paddingTop + topInset,
+                            paddingRight,
+                            paddingBottom);
+            return insets;
+        }
     }
 
     public override bool OnCreateOptionsMenu(IMenu? menu) {
