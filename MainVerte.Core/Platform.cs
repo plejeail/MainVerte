@@ -22,7 +22,7 @@ namespace MainVerte.Core;
 
 public enum LogLevel { Debug, Info, Warning, Error, }
 
-public enum UserFeedbackKind { Info, Success, Warning, Failure, }
+public enum FeedbackKind { Info, Success, Warning, Failure, }
 
 /// <summary>
 /// Defines the platform-dependent services required by MainVerte.Core.
@@ -48,7 +48,11 @@ public interface IPlatform
     /// The intent of the feedback, allowing the host platform to choose an
     /// appropriate presentation.
     /// </param>
-    public void UserFeedback(string message, UserFeedbackKind kind);
+    public void UserFeedback(string message, FeedbackKind kind);
+
+    void Publish(MainVerteEvent payload);
+
+    public void UpdateSchedulerTriggerTime(DateTimeOffset newDate);
 }
 
 sealed class DefaultPlatform : IPlatform
@@ -61,7 +65,11 @@ sealed class DefaultPlatform : IPlatform
         return AppContext.BaseDirectory;
     }
 
-    public void UserFeedback(string message, UserFeedbackKind kind) {}
+    public void UserFeedback(string message, FeedbackKind kind) {}
+
+    public void Publish(MainVerteEvent payload) {}
+
+    public void UpdateSchedulerTriggerTime(DateTimeOffset newDate) {}
 }
 
 public static class Platform
@@ -104,21 +112,31 @@ public static class Platform
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void UserFeedbackSuccess(string message) {
-        _platform.UserFeedback(message,  UserFeedbackKind.Success);
+        _platform.UserFeedback(message,  FeedbackKind.Success);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void UserFeedbackFailure(string message) {
-        _platform.UserFeedback(message,  UserFeedbackKind.Failure);
+        _platform.UserFeedback(message,  FeedbackKind.Failure);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void UserFeedbackInfo(string message) {
-        _platform.UserFeedback(message,  UserFeedbackKind.Info);
+        _platform.UserFeedback(message,  FeedbackKind.Info);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static void UserFeedbackWarning(string message) {
-        _platform.UserFeedback(message,  UserFeedbackKind.Warning);
+        _platform.UserFeedback(message,  FeedbackKind.Warning);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void Publish(MainVerteEvent payload) {
+        _platform.Publish(payload);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static void UpdateSchedulerTriggerTime(DateTimeOffset newDate) {
+        _platform.UpdateSchedulerTriggerTime(newDate);
     }
 }

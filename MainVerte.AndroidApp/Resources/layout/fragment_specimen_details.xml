@@ -78,6 +78,24 @@
             android:layout_marginTop="8dp"
             android:textSize="16sp" />
 
+        <TextView
+            android:id="@+id/care_rules_heading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/specimen_details_care_title"
+            android:textSize="20sp"
+            android:textStyle="bold" />
+
+        <GridLayout
+            android:id="@+id/care_rules_grid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:columnCount="2"
+            android:rowCount="2"
+            android:useDefaultMargins="false" />
+
     </LinearLayout>
 
 </ScrollView>

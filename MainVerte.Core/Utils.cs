@@ -1,6 +1,6 @@
 ﻿//! MainVerte.Core/Utils.cs ---------------------------------------------------
 //!
-//! TOOLS AND UTILITARY METHODS
+//! TOOLS AND UTILITY METHODS
 //!
 //! Toolbox that may be used anywhere, unrelated to MainVerte.
 //! ---------------------------------------------------------------------------

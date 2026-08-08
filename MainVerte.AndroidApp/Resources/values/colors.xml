@@ -13,4 +13,8 @@
     <color name="feedback_failure">#C62828</color>
     <color name="feedback_info">#1565C0</color>
     <color name="feedback_warning">#EF6C00</color>
+    <color name="care_rule_active">#E5F3EA</color>
+    <color name="care_rule_inactive">#E6E8E6</color>
+    <color name="care_rule_active_text">#176B4D</color>
+    <color name="care_rule_inactive_text">#737873</color>
 </resources>

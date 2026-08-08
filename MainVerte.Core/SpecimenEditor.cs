@@ -12,7 +12,7 @@ public sealed class SpecimenEditor
     public bool IsNew { get; private set; }
 
     public SpecimenEditor(Database database) {
-        ArgumentNullException.ThrowIfNull(database);
+        Require.NotNull(database);
         _database = database;
     }
 
@@ -38,6 +38,7 @@ public sealed class SpecimenEditor
                                             String.Empty,
                                             null,
                                             null,
+                                            CareRules.Empty,
                                             0,
                                             0);
         IsNew = true;
@@ -55,10 +56,55 @@ public sealed class SpecimenEditor
         };
     }
 
-    public async Task<SpecimenDetail> SaveAsync() {
+    public void SetCareRule(CareType type, CareRule? rule) {
         SpecimenDetail? draft = _draftSpecimen;
         if (draft == null) {
             throw new InvalidOperationException("No specimen is being edited.");
+        }
+
+        CareRules rules = draft.Rules;
+        rules[type] = rule;
+        _draftSpecimen = draft with { Rules = rules };
+    }
+
+    public async Task<DateTimeOffset?> RescheduleCareRuleNowAsync(CareType type, DateTimeOffset now) {
+        SpecimenDetail? draft = _draftSpecimen;
+        if (draft == null) {
+            throw new InvalidOperationException("No specimen is loaded.");
+        }
+
+        CareRule? rule = draft.Rules[type];
+        if (rule == null) {
+            return null;
+        }
+
+        DateTimeOffset? nextTrigger = await _database.RescheduleCareRuleNowAsync(rule.Id, now);
+        if (!nextTrigger.HasValue) {
+            return null;
+        }
+
+        CareRule updatedRule = new() {
+            Id = rule.Id,
+            SpecimenId = rule.SpecimenId,
+            Type = rule.Type,
+            TriggerInterval = rule.TriggerInterval,
+            CurrentValue = rule.CurrentValue,
+            ThresholdValue = rule.ThresholdValue,
+            NextTrigger = nextTrigger.Value,
+        };
+        CareRules rules = draft.Rules;
+        rules[type] = updatedRule;
+        _draftSpecimen = draft with { Rules = rules };
+        _originalSpecimen = _draftSpecimen;
+        return nextTrigger;
+    }
+
+    public async Task<SpecimenDetail> SaveAsync() {
+        Require.NotNull(_draftSpecimen);
+        SpecimenDetail? draft = _draftSpecimen;
+
+        if (draft == null) {
+            throw new InvalidOperationException("No specimen is being saved.");
         }
 
         SpecimenDetail savedSpecimen;

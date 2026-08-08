@@ -10,7 +10,7 @@ namespace MainVerte.AndroidApp;
 
 static class Feedback
 {
-    public static void Send(Activity activity, string message, UserFeedbackKind kind) {
+    public static void Send(Activity activity, string message, FeedbackKind kind) {
         if (activity.IsFinishing || activity.IsDestroyed) {
             return;
         }
@@ -33,15 +33,15 @@ static class Feedback
         });
     }
 
-    private static Color GetFeedbackColor(Activity activity, UserFeedbackKind kind) {
+    private static Color GetFeedbackColor(Activity activity, FeedbackKind kind) {
         Require.IsInRange(kind);
 
         int colorResource = Resource.Color.feedback_info;
         switch (kind) {
-        case UserFeedbackKind.Success: colorResource = Resource.Color.feedback_success; break;
-        case UserFeedbackKind.Failure: colorResource = Resource.Color.feedback_failure; break;
-        case UserFeedbackKind.Info:    colorResource = Resource.Color.feedback_info;    break;
-        case UserFeedbackKind.Warning: colorResource = Resource.Color.feedback_warning; break;
+        case FeedbackKind.Success: colorResource = Resource.Color.feedback_success; break;
+        case FeedbackKind.Failure: colorResource = Resource.Color.feedback_failure; break;
+        case FeedbackKind.Info:    colorResource = Resource.Color.feedback_info;    break;
+        case FeedbackKind.Warning: colorResource = Resource.Color.feedback_warning; break;
         }
 
         return new Color(ContextCompat.GetColor(activity, colorResource));
@@ -70,9 +70,13 @@ sealed class AndroidPlatform : IPlatform
         return Application.Context.FilesDir?.AbsolutePath ?? String.Empty;
     }
 
-    public void UserFeedback(string message, UserFeedbackKind kind) {
+    public void UserFeedback(string message, FeedbackKind kind) {
         if (_activity.TryGetTarget(out Activity? activity)) {
             Feedback.Send(activity, message, kind);
         }
     }
+
+    public void Publish(MainVerteEvent payload) {}
+
+    public void UpdateSchedulerTriggerTime(DateTimeOffset newDate) {}
 }

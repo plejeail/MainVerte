@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading.Tasks;
 using Android.App;
 using Android.OS;
@@ -46,9 +47,11 @@ sealed class MainActivity : AppCompatActivity
     private ToolbarMenuAction[] _toolbarActions = Array.Empty<ToolbarMenuAction>();
 
     protected override void OnCreate(Bundle? savedInstanceState) {
+        var activityWatch = Stopwatch.StartNew();
         Platform.SetImplementation(new AndroidPlatform(this));
 
         if (!Services.Initialized) { // Run once
+            var serviceWatch = Stopwatch.StartNew();
             CrashReport.ProcessPending();
 
             // Catch unhandled exceptions
@@ -57,6 +60,7 @@ sealed class MainActivity : AppCompatActivity
             AndroidEnvironment.UnhandledExceptionRaiser += OnAndroidException;
 
             Services.EnsureInitialized();
+            Log.Info($"Services initialized in {serviceWatch.ElapsedMilliseconds}ms");
         }
 
         base.OnCreate(savedInstanceState);
@@ -71,6 +75,8 @@ sealed class MainActivity : AppCompatActivity
         if (savedInstanceState == null) {
             ShowCollection();
         }
+
+        Log.Info($"Activity created in {activityWatch.ElapsedMilliseconds}ms");
     }
 
     public override bool OnSupportNavigateUp() {

@@ -10,11 +10,14 @@ using Android.Views;
 using Android.Widget;
 using AndroidX.Activity.Result;
 using AndroidX.Activity.Result.Contract;
+using AndroidX.Core.Content;
 using AndroidX.Fragment.App;
 using AndroidX.Lifecycle;
+using Google.Android.Material.BottomSheet;
 
 using AlertDialog = Android.App.AlertDialog;
 using AndroidActivityFlags = Android.Content.ActivityFlags;
+using DatePickerDialog = Android.App.DatePickerDialog;
 using Dialog = Android.App.Dialog;
 using Result = Android.App.Result;
 using AndroidUri = Android.Net.Uri;
@@ -32,6 +35,7 @@ enum SpecimenDetailsOperationState
     Saving,
     Deleting,
     ImportingPhoto,
+    UpdatingCareRule,
 }
 
 sealed class SpecimenDetailsViewModel : ViewModel
@@ -49,13 +53,13 @@ sealed class SpecimenDetailsViewModel : ViewModel
 
     public bool IsBusy() {
         return OperationState == SpecimenDetailsOperationState.Saving
-            || OperationState == SpecimenDetailsOperationState.Deleting;
+            || OperationState == SpecimenDetailsOperationState.Deleting
+            || OperationState == SpecimenDetailsOperationState.UpdatingCareRule;
     }
 
     public event Action? StateChanged;
 
-    public void Initialize(SpecimenDetailsMode mode, MainVerteId id)
-    {
+    public void Initialize(SpecimenDetailsMode mode, MainVerteId id) {
         if (_initialized) {
             return;
         }
@@ -72,8 +76,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         DraftDisplayName = SpecimenEditor.Specimen?.DisplayName ?? String.Empty;
     }
 
-    public Task<SpecimenDetail?> LoadAsync()
-    {
+    public Task<SpecimenDetail?> LoadAsync() {
         if (_loadTask != null) {
             return _loadTask;
         }
@@ -82,14 +85,43 @@ sealed class SpecimenDetailsViewModel : ViewModel
         return _loadTask;
     }
 
-    public void SetDraftDisplayName(string displayName)
-    {
+    public void SetDraftDisplayName(string displayName) {
         Require.NotNull(displayName);
         DraftDisplayName = displayName;
     }
 
-    public void EnterEditMode()
-    {
+    public void SetDraftCareRule(CareType type, CareRule? rule) {
+        if (Mode == SpecimenDetailsMode.Read
+            || OperationState != SpecimenDetailsOperationState.Idle) {
+            return;
+        }
+
+        SpecimenEditor.SetCareRule(type, rule);
+        NotifyStateChanged();
+    }
+
+    public async Task<bool> TriggerCareRuleNowAsync(CareType type) {
+        if (Mode != SpecimenDetailsMode.Read
+            || OperationState != SpecimenDetailsOperationState.Idle) {
+            return false;
+        }
+
+        if (SpecimenEditor.Specimen?.Rules[type] == null) {
+            return false;
+        }
+
+        SetOperationState(SpecimenDetailsOperationState.UpdatingCareRule);
+        try {
+            DateTimeOffset? nextTrigger = await SpecimenEditor.RescheduleCareRuleNowAsync(
+                type,
+                DateTimeOffset.UtcNow);
+            return nextTrigger.HasValue;
+        } finally {
+            SetOperationState(SpecimenDetailsOperationState.Idle);
+        }
+    }
+
+    public void EnterEditMode() {
         if (OperationState != SpecimenDetailsOperationState.Idle || SpecimenEditor.Specimen == null) {
             return;
         }
@@ -100,8 +132,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         NotifyStateChanged();
     }
 
-    public Task ImportGalleryPhotoAsync(ContentResolver resolver, AndroidUri sourceUri)
-    {
+    public Task ImportGalleryPhotoAsync(ContentResolver resolver, AndroidUri sourceUri) {
         Require.NotNull(resolver);
         Require.NotNull(sourceUri);
 
@@ -113,8 +144,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         return ImportGalleryPhotoCoreAsync(resolver, sourceUri);
     }
 
-    public Task SaveAsync()
-    {
+    public Task SaveAsync() {
         if (OperationState != SpecimenDetailsOperationState.Idle) {
             return Task.CompletedTask;
         }
@@ -123,8 +153,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         return SaveCoreAsync();
     }
 
-    public Task<bool> DeleteAsync()
-    {
+    public Task<bool> DeleteAsync() {
         if (OperationState != SpecimenDetailsOperationState.Idle) {
             return Task.FromResult(false);
         }
@@ -138,8 +167,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         return DeleteCoreAsync(specimen);
     }
 
-    public bool CancelChanges()
-    {
+    public bool CancelChanges() {
         if (IsBusy()) {
             return false;
         }
@@ -156,8 +184,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         return true;
     }
 
-    public void RemovePhoto()
-    {
+    public void RemovePhoto() {
         if (OperationState != SpecimenDetailsOperationState.Idle) {
             return;
         }
@@ -166,8 +193,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         NotifyStateChanged();
     }
 
-    protected override void OnCleared()
-    {
+    protected override void OnCleared() {
         _cleared = true;
         if (OperationState == SpecimenDetailsOperationState.Idle) {
             PhotoSession.CleanupUncommittedPhotoFiles();
@@ -177,8 +203,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         base.OnCleared();
     }
 
-    private async Task<SpecimenDetail?> LoadCoreAsync()
-    {
+    private async Task<SpecimenDetail?> LoadCoreAsync() {
         try {
             SpecimenDetail? specimen = await SpecimenEditor.LoadAsync(SpecimenId);
             if (specimen != null) {
@@ -194,8 +219,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         }
     }
 
-    private async Task ImportGalleryPhotoCoreAsync(ContentResolver resolver, AndroidUri sourceUri)
-    {
+    private async Task ImportGalleryPhotoCoreAsync(ContentResolver resolver, AndroidUri sourceUri) {
         try {
             await PhotoSession.ImportGalleryPhotoAsync(resolver, sourceUri);
         } finally {
@@ -203,8 +227,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         }
     }
 
-    private async Task SaveCoreAsync()
-    {
+    private async Task SaveCoreAsync() {
         bool databaseSaved = false;
         try {
             SpecimenDetail? specimen = SpecimenEditor.Specimen;
@@ -232,8 +255,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         }
     }
 
-    private async Task<bool> DeleteCoreAsync(SpecimenDetail specimen)
-    {
+    private async Task<bool> DeleteCoreAsync(SpecimenDetail specimen) {
         try {
             bool deleted = await SpecimenEditor.DeleteAsync();
             if (deleted) {
@@ -246,8 +268,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         }
     }
 
-    private void SetOperationState(SpecimenDetailsOperationState state)
-    {
+    private void SetOperationState(SpecimenDetailsOperationState state) {
         OperationState = state;
         NotifyStateChanged();
 
@@ -256,8 +277,7 @@ sealed class SpecimenDetailsViewModel : ViewModel
         }
     }
 
-    private void NotifyStateChanged()
-    {
+    private void NotifyStateChanged() {
         StateChanged?.Invoke();
     }
 }
@@ -267,14 +287,10 @@ sealed class SpecimenDetailsFragment : Fragment
     private const string ModeArgument = "mode";
     private const string SpecimenIdArgument = "specimen_id";
     private const string CollectionIdArgument = "collection_id";
-    private enum ItemId { Edit = 1, Save = 2, Cancel = 3, Delete = 4, }
 
-    private enum PhotoAction
-    {
-        Gallery,
-        Camera,
-        Delete,
-    }
+    private enum ItemId { Edit = 1, Save = 2, Cancel = 3, Delete = 4, }
+    private enum PhotoAction { Gallery, Camera, Delete, }
+
 
     private Binding.fragment_specimen_details? _binding;
     private SpecimenDetailsViewModel _viewModel = null!;
@@ -299,7 +315,7 @@ sealed class SpecimenDetailsFragment : Fragment
             Arguments = new Bundle(),
         };
 
-        fragment.Arguments.PutInt(SpecimenIdArgument, specimenId.Value);
+        fragment.Arguments.PutLong(SpecimenIdArgument, specimenId.Value);
         fragment.Arguments.PutInt(ModeArgument, (int)SpecimenDetailsMode.Read);
         return fragment;
     }
@@ -309,7 +325,7 @@ sealed class SpecimenDetailsFragment : Fragment
             Arguments = new Bundle(),
         };
 
-        fragment.Arguments.PutInt(CollectionIdArgument, collectionId.Value);
+        fragment.Arguments.PutLong(CollectionIdArgument, collectionId.Value);
         fragment.Arguments.PutInt(ModeArgument, (int)SpecimenDetailsMode.Create);
         return fragment;
     }
@@ -476,7 +492,7 @@ sealed class SpecimenDetailsFragment : Fragment
                                   (_, _) => {
                                       _ = DeleteSpecimenAsync();
                                       if (Activity != null) {
-                                          Feedback.Send(Activity, GetString(Resource.String.specimen_detail_delete_confirmation_yes), UserFeedbackKind.Success);
+                                          Feedback.Send(Activity, GetString(Resource.String.specimen_detail_delete_confirmation_yes), FeedbackKind.Success);
                                       }
                                   });
         builder.Show();
@@ -542,7 +558,7 @@ sealed class SpecimenDetailsFragment : Fragment
         PackageManager? packageManager = context.PackageManager;
         if (packageManager == null) {
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), FeedbackKind.Failure);
             }
 
             return;
@@ -565,7 +581,7 @@ sealed class SpecimenDetailsFragment : Fragment
         picker.AddFlags(AndroidActivityFlags.GrantReadUriPermission);
         if (picker.ResolveActivity(packageManager) == null) {
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), FeedbackKind.Failure);
             }
             return;
         }
@@ -590,7 +606,7 @@ sealed class SpecimenDetailsFragment : Fragment
         } catch (Exception ex) {
             Log.Warn($"Could not import selected photo: {ex.Message}");
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_selection_failed), FeedbackKind.Failure);
             }
         }
 
@@ -606,7 +622,7 @@ sealed class SpecimenDetailsFragment : Fragment
         PackageManager? packageManager = context.PackageManager;
         if (packageManager == null) {
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), FeedbackKind.Failure);
             }
 
             return;
@@ -615,7 +631,7 @@ sealed class SpecimenDetailsFragment : Fragment
         Intent camera = new(MediaStore.ActionImageCapture);
         if (camera.ResolveActivity(packageManager) == null) {
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), FeedbackKind.Failure);
             }
 
             return;
@@ -631,7 +647,7 @@ sealed class SpecimenDetailsFragment : Fragment
             _viewModel.PhotoSession.CancelCameraCapture();
 
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_camera_unavailable), FeedbackKind.Failure);
             }
         }
     }
@@ -640,7 +656,7 @@ sealed class SpecimenDetailsFragment : Fragment
         PhotoCaptureResult captureResult = _viewModel.PhotoSession.CompleteCameraCapture(resultCode == (int)Result.Ok);
         if (captureResult == PhotoCaptureResult.Failed) {
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_capture_failed), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_photo_capture_failed), FeedbackKind.Failure);
             }
         }
 
@@ -666,7 +682,7 @@ sealed class SpecimenDetailsFragment : Fragment
         if (displayName.Length == 0) {
             _binding.specimen_name_editor.Error = GetString(Resource.String.specimen_detail_mandatory);
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_detail_name_mandatory), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_detail_name_mandatory), FeedbackKind.Failure);
             }
 
             return;
@@ -676,12 +692,12 @@ sealed class SpecimenDetailsFragment : Fragment
         try {
             await _viewModel.SaveAsync();
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_save_success), UserFeedbackKind.Success);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_save_success), FeedbackKind.Success);
             }
         } catch (Exception ex) {
             Log.Warn($"Could not save specimen: {ex.Message}");
             if (Activity != null) {
-                Feedback.Send(Activity, GetString(Resource.String.specimen_save_failed), UserFeedbackKind.Failure);
+                Feedback.Send(Activity, GetString(Resource.String.specimen_save_failed), FeedbackKind.Failure);
             }
             RenderPhoto();
         }
@@ -732,6 +748,258 @@ sealed class SpecimenDetailsFragment : Fragment
         _binding.operation_progress.Visibility = _viewModel.OperationState == SpecimenDetailsOperationState.Idle
             ? ViewStates.Gone
             : ViewStates.Visible;
+        RenderCareRules();
+    }
+
+    private void RenderCareRules() {
+        if (_binding == null) {
+            return;
+        }
+
+        _binding.care_rules_grid.RemoveAllViews();
+        CareRules rules = CareRules.Empty;
+        if (_viewModel.SpecimenEditor.Specimen != null) {
+            rules = _viewModel.SpecimenEditor.Specimen.Rules;
+        }
+
+        LayoutInflater? inflater = LayoutInflater.From(RequireContext());
+        if (inflater == null) {
+            throw new InvalidOperationException("Could not create a layout inflater.");
+        }
+
+        for (int index = 0; index < (int)CareType.Count; index++) {
+            CareType type = (CareType)index;
+            View? cardView = inflater.Inflate(Resource.Layout.care_rule_card,
+                                               _binding.care_rules_grid,
+                                               attachToRoot: false);
+            if (cardView == null) {
+                throw new InvalidOperationException("Could not inflate care rule card.");
+            }
+
+            Binding.care_rule_card card = new(cardView);
+            CareRule? rule = rules[type];
+            bool configured = rule != null;
+            bool isEditing = _viewModel.Mode != SpecimenDetailsMode.Read;
+            bool useActiveColors = isEditing || configured;
+            int textColorResource = useActiveColors
+                ? Resource.Color.care_rule_active_text
+                : Resource.Color.care_rule_inactive_text;
+            int textColor = ContextCompat.GetColor(RequireContext(), textColorResource);
+
+            card.care_rule_icon.SetImageResource(GetCareRuleIcon(type));
+            card.care_rule_icon.SetColorFilter(new Color(textColor));
+            card.care_rule_title.Text = GetString(GetCareRuleTitle(type));
+            card.care_rule_title.SetTextColor(new Color(textColor));
+            card.care_rule_value.Text = configured
+                ? rule!.NextTrigger.ToLocalTime().ToString("d")
+                : GetString(Resource.String.care_rule_value_not_configured);
+            card.care_rule_value.SetTextColor(new Color(textColor));
+            card.care_rule_unit.Text = configured
+                ? GetString(Resource.String.care_rule_unit_date)
+                : String.Empty;
+            card.care_rule_unit.SetTextColor(new Color(textColor));
+            card.care_rule_action.Visibility = !isEditing && configured
+                ? ViewStates.Visible
+                : ViewStates.Gone;
+            card.care_rule_action.SetColorFilter(new Color(textColor));
+
+            int backgroundResource = useActiveColors
+                ? Resource.Color.care_rule_active
+                : Resource.Color.care_rule_inactive;
+            cardView.SetBackgroundColor(new Color(ContextCompat.GetColor(RequireContext(), backgroundResource)));
+
+            if (isEditing) {
+                cardView.Click += (_, _) => ShowCareRuleEditor(type);
+            } else if (configured) {
+                card.care_rule_action.Click += (_, _) => ConfirmCareRuleNow(type);
+            }
+
+            _binding.care_rules_grid.AddView(cardView);
+        }
+    }
+
+    private void ShowCareRuleEditor(CareType type) {
+        if (_viewModel.Mode == SpecimenDetailsMode.Read
+            || _viewModel.OperationState != SpecimenDetailsOperationState.Idle
+            || Activity == null) {
+            return;
+        }
+
+        SpecimenDetail? specimen = _viewModel.SpecimenEditor.Specimen;
+        if (specimen == null) {
+            return;
+        }
+
+        CareRule? existingRule = specimen.Rules[type];
+        CareRule workingRule = existingRule == null
+            ? CreateDefaultCareRule(type, specimen.Id)
+            : CloneCareRule(existingRule);
+        int intervalDays = GetIntervalDays(workingRule.TriggerInterval);
+        DateTimeOffset nextTrigger = workingRule.NextTrigger;
+
+        LayoutInflater? inflater = LayoutInflater.From(RequireContext());
+        if (inflater == null) {
+            throw new InvalidOperationException("Could not create a layout inflater.");
+        }
+
+        View? content = inflater.Inflate(Resource.Layout.care_rule_editor, null, false);
+        if (content == null) {
+            throw new InvalidOperationException("Could not inflate care rule editor.");
+        }
+
+        Binding.care_rule_editor binding = new(content);
+        BottomSheetDialog dialog = new(RequireContext());
+        dialog.SetContentView(content);
+
+        binding.care_rule_editor_title.Text = GetString(GetCareRuleTitle(type));
+        binding.care_rule_interval.Text = intervalDays.ToString();
+        binding.care_rule_next_trigger.Text = FormatCareRuleDate(nextTrigger);
+        binding.care_rule_delete.Visibility = existingRule == null
+            ? ViewStates.Gone
+            : ViewStates.Visible;
+
+        binding.care_rule_next_trigger.Click += (_, _) => {
+            DateTime localDate = nextTrigger.LocalDateTime;
+            DatePickerDialog datePicker = new(RequireContext(), (_, args) => {
+                DateTime selectedDate = new(args.Year, args.Month + 1, args.DayOfMonth, 0, 0, 0, DateTimeKind.Local);
+                nextTrigger = new DateTimeOffset(selectedDate);
+                binding.care_rule_next_trigger.Text = FormatCareRuleDate(nextTrigger);
+            }, localDate.Year, localDate.Month - 1, localDate.Day);
+            datePicker.Show();
+        };
+
+        binding.care_rule_now_plus_interval.Click += (_, _) => {
+            if (TryReadIntervalDays(binding.care_rule_interval.Text, out int days)) {
+                intervalDays = days;
+                nextTrigger = DateTimeOffset.Now.AddDays(intervalDays);
+                binding.care_rule_next_trigger.Text = FormatCareRuleDate(nextTrigger);
+            } else {
+                binding.care_rule_interval.Error = GetString(Resource.String.care_rule_interval_invalid);
+            }
+        };
+
+        binding.care_rule_delete.Click += (_, _) => {
+            _viewModel.SetDraftCareRule(type, null);
+            dialog.Dismiss();
+        };
+
+        binding.care_rule_cancel.Click += (_, _) => dialog.Dismiss();
+        binding.care_rule_save.Click += (_, _) => {
+            if (!TryReadIntervalDays(binding.care_rule_interval.Text, out int days)) {
+                binding.care_rule_interval.Error = GetString(Resource.String.care_rule_interval_invalid);
+                return;
+            }
+
+            workingRule.TriggerInterval = checked(days * 86400);
+            workingRule.NextTrigger = nextTrigger;
+            _viewModel.SetDraftCareRule(type, workingRule);
+            dialog.Dismiss();
+        };
+
+        dialog.Show();
+    }
+
+    private void ConfirmCareRuleNow(CareType type) {
+        if (_viewModel.Mode != SpecimenDetailsMode.Read
+            || _viewModel.OperationState != SpecimenDetailsOperationState.Idle
+            || Activity == null) {
+            return;
+        }
+
+        AlertDialog.Builder builder = new(Activity);
+        builder.SetTitle(Resource.String.care_rule_confirm_title);
+        builder.SetMessage(Resource.String.care_rule_confirm_message);
+        builder.SetNegativeButton(Resource.String.care_rule_confirm_no, (_, _) => { });
+        builder.SetPositiveButton(Resource.String.care_rule_confirm_yes,
+                                  (_, _) => _ = TriggerCareRuleNowAsync(type));
+        builder.Show();
+    }
+
+    private async Task TriggerCareRuleNowAsync(CareType type) {
+        try {
+            bool updated = await _viewModel.TriggerCareRuleNowAsync(type);
+            if (Activity != null) {
+                Feedback.Send(Activity,
+                              updated
+                                  ? GetString(Resource.String.care_rule_save_success)
+                                  : GetString(Resource.String.care_rule_save_failed),
+                              updated ? FeedbackKind.Success : FeedbackKind.Failure);
+            }
+        } catch (Exception ex) {
+            Log.Warn($"Could not update care rule: {ex.Message}");
+            if (Activity != null) {
+                Feedback.Send(Activity,
+                              GetString(Resource.String.care_rule_save_failed),
+                              FeedbackKind.Failure);
+            }
+        }
+    }
+
+    private static CareRule CreateDefaultCareRule(CareType type, MainVerteId specimenId) {
+        return new CareRule {
+            Id = MainVerteId.Invalid,
+            SpecimenId = specimenId,
+            Type = type,
+            TriggerInterval = 7 * 86400,
+            NextTrigger = DateTimeOffset.Now.AddDays(7),
+        };
+    }
+
+    private static CareRule CloneCareRule(CareRule rule) {
+        return new CareRule {
+            Id = rule.Id,
+            SpecimenId = rule.SpecimenId,
+            Type = rule.Type,
+            TriggerInterval = rule.TriggerInterval,
+            CurrentValue = rule.CurrentValue,
+            ThresholdValue = rule.ThresholdValue,
+            NextTrigger = rule.NextTrigger,
+        };
+    }
+
+    private static int GetIntervalDays(int intervalSeconds) {
+        if (intervalSeconds <= 0) {
+            return 1;
+        }
+
+        double days = intervalSeconds / 86400.0;
+        int roundedDays = (int)Math.Round(days);
+        return Math.Max(1, roundedDays);
+    }
+
+    private static bool TryReadIntervalDays(string? text, out int days) {
+        if (!Int32.TryParse(text, out days) || days <= 0 || days > Int32.MaxValue / 86400) {
+            days = 0;
+            return false;
+        }
+
+        return true;
+    }
+
+    private static string FormatCareRuleDate(DateTimeOffset date) {
+        return date.ToLocalTime().ToString("d");
+    }
+
+    private static int GetCareRuleTitle(CareType type) {
+        switch (type) {
+        case CareType.WateringDate: return Resource.String.care_rule_watering_title;
+        case CareType.Repotting:    return Resource.String.care_rule_repotting_title;
+        case CareType.Fertilizing:  return Resource.String.care_rule_fertilizing_title;
+        case CareType.TurningPot:   return Resource.String.care_rule_turning_pot_title;
+        case CareType.Count:
+        default: throw new ArgumentOutOfRangeException(nameof(type), type, null);
+        }
+    }
+
+    private static int GetCareRuleIcon(CareType type) {
+        switch (type) {
+        case CareType.WateringDate: return Android.Resource.Drawable.IcMenuToday;
+        case CareType.Repotting:    return Android.Resource.Drawable.IcMenuEdit;
+        case CareType.Fertilizing:  return Android.Resource.Drawable.IcMenuAdd;
+        case CareType.TurningPot:   return Android.Resource.Drawable.IcMenuRotate;
+        case CareType.Count:
+        default: throw new ArgumentOutOfRangeException(nameof(type), type, null);
+        }
     }
 
     private void RenderPhoto() {
@@ -873,7 +1141,7 @@ sealed class SpecimenDetailsFragment : Fragment
     }
 
     private MainVerteId ReadIdArgument(string key) {
-        int? id = Arguments?.GetInt(key);
+        long? id = Arguments?.GetLong(key);
         if (id == null) {
             throw new InvalidOperationException($"Invalid {key}.");
         }

@@ -92,14 +92,14 @@ Migration `0001_bootstrap_default_collection.sql` creates the default gardener a
 | 1003  | short_lived_perennial |
 | 1004  | perennial             |
 
-# Rule.Source
+# CareRule.Source
 | value | enum   |
 |-------|--------|
 | 0     | none   |
 | 1001  | user   |
 | 1002  | system |
 
-# Rule.Type
+# CareRule.Type
 | value | enum                |
 |-------|---------------------|
 | 0     | none                |
@@ -117,10 +117,23 @@ Migration `0001_bootstrap_default_collection.sql` creates the default gardener a
 | 1012  | light_adjustment    |
 | 1013  | measurement         |
 
-# Rule.Severity
+# CareRule.Severity
 | value | enum     |
 |-------|----------|
 | 0     | none     |
 | 1001  | low      |
 | 1002  | warning  |
 | 1003  | critical |
+
+## CareRule storage
+
+`CareRule` records are stored in the `care_rule` table. The scheduling fields are stored as typed SQLite integers:
+
+| column | meaning |
+|--------|---------|
+| `specimen_id` | specimen receiving the care rule |
+| `type` | care action type |
+| `current_value` | current measured or accumulated value |
+| `threshold_value` | threshold used when the rule is value-based |
+| `next_trigger` | next trigger as Unix epoch seconds |
+| `range` | recurrence interval in seconds |

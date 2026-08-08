@@ -122,6 +122,7 @@ public class DatabaseTests
             "Ma plante",
             "photo://plant",
             1234L,
+            CareRules.Empty,
             0,
             0);
 
@@ -210,6 +211,122 @@ public class DatabaseTests
     }
 
     [Fact]
+    public async Task CareRuleCrudAsync_Persists_Rules_And_Finds_Due_Rules() {
+        string dbPath = CreateTempDbPath();
+        using var db = new Database();
+        db.Initialize(dbPath);
+
+        await db.ExecuteNonQueryAsync("""
+            INSERT INTO gardener(id, display_name, created_at) VALUES (1, 'Test', 1000);
+            INSERT INTO collection(id, gardener_id, name, created_at, modified_at)
+                VALUES (11, 1, 'Collection', 1000, 1000);
+            INSERT INTO specimen(id, collection_id, display_name, created_at, modified_at)
+                VALUES (3, 11, 'Ma plante', 1000, 1000);
+            """);
+
+        DateTimeOffset dueDate = DateTimeOffset.FromUnixTimeSeconds(2000);
+        CareRule rule = new() {
+            SpecimenId = new MainVerteId(3),
+            Type = CareType.WateringDate,
+            CurrentValue = 10,
+            ThresholdValue = 20,
+            NextTrigger = dueDate,
+            TriggerInterval = 86400,
+        };
+
+        MainVerteId ruleId = await db.AddCareRuleAsync(rule);
+        rule.Id = ruleId;
+
+        DateTimeOffset? nextTrigger = await db.GetNextTriggerDateAsync();
+        Assert.Equal(dueDate, nextTrigger);
+
+        CareRule[] dueRules = await db.GetRulesToProcessBeforeAsync(dueDate);
+        Assert.Single(dueRules);
+        Assert.Equal(ruleId, dueRules[0].Id);
+        Assert.Equal(10, dueRules[0].CurrentValue);
+
+        rule.NextTrigger = dueDate.AddDays(1);
+        Assert.True(await db.UpdateCareRuleAsync(rule));
+        Assert.Empty(await db.GetRulesToProcessBeforeAsync(dueDate));
+        Assert.Equal(rule.NextTrigger, await db.GetNextTriggerDateAsync());
+
+        Assert.True(await db.RemoveCareRuleAsync(rule));
+        Assert.Null(await db.GetNextTriggerDateAsync());
+        Assert.False(await db.RemoveCareRuleAsync(rule));
+    }
+
+    [Fact]
+    public async Task SpecimenCrudAsync_Persists_CareRules() {
+        string dbPath = CreateTempDbPath();
+        using var db = new Database();
+        db.Initialize(dbPath);
+
+        await db.ExecuteNonQueryAsync("""
+            INSERT INTO gardener(id, display_name, created_at) VALUES (1, 'Test', 1000);
+            INSERT INTO collection(id, gardener_id, name, created_at, modified_at)
+                VALUES (11, 1, 'Collection', 1000, 1000);
+            """);
+
+        CareRules rules = CareRules.Empty;
+        rules[CareType.Fertilizing] = new CareRule {
+            Type = CareType.Fertilizing,
+            NextTrigger = DateTimeOffset.FromUnixTimeSeconds(3000),
+            TriggerInterval = 604800,
+        };
+
+        MainVerteId id = await db.CreateSpecimenAsync(new SpecimenDetail(
+            default,
+            new MainVerteId(11),
+            null,
+            null,
+            null,
+            "Ma plante",
+            null,
+            null,
+            rules,
+            0,
+            0));
+
+        SpecimenDetail? specimen = await db.GetSpecimenAsync(id);
+        Assert.NotNull(specimen);
+        CareRule? rule = specimen.Rules[CareType.Fertilizing];
+        Assert.NotNull(rule);
+        Assert.Equal(id, rule.SpecimenId);
+        Assert.Equal(DateTimeOffset.FromUnixTimeSeconds(3000), rule.NextTrigger);
+    }
+
+    [Fact]
+    public async Task RescheduleCareRuleNowAsync_Uses_The_Current_Time_And_Interval() {
+        string dbPath = CreateTempDbPath();
+        using var db = new Database();
+        db.Initialize(dbPath);
+
+        await db.ExecuteNonQueryAsync("""
+            INSERT INTO gardener(id, display_name, created_at) VALUES (1, 'Test', 1000);
+            INSERT INTO collection(id, gardener_id, name, created_at, modified_at)
+                VALUES (11, 1, 'Collection', 1000, 1000);
+            INSERT INTO specimen(id, collection_id, display_name, created_at, modified_at)
+                VALUES (3, 11, 'Ma plante', 1000, 1000);
+            """);
+
+        CareRule rule = new() {
+            SpecimenId = new MainVerteId(3),
+            Type = CareType.WateringDate,
+            NextTrigger = DateTimeOffset.FromUnixTimeSeconds(2000),
+            TriggerInterval = 86400,
+        };
+        rule.Id = await db.AddCareRuleAsync(rule);
+
+        DateTimeOffset now = DateTimeOffset.FromUnixTimeSeconds(5000);
+        DateTimeOffset? nextTrigger = await db.RescheduleCareRuleNowAsync(rule.Id, now);
+
+        Assert.Equal(now.AddSeconds(rule.TriggerInterval), nextTrigger);
+        CareRule[] dueRules = await db.GetRulesToProcessBeforeAsync(now);
+        Assert.Empty(dueRules);
+        Assert.Null(await db.RescheduleCareRuleNowAsync(new MainVerteId(999), now));
+    }
+
+    [Fact]
     public async Task Initialize_Applies_Embedded_Migration() {
         string    dbPath = CreateTempDbPath();
         using var db     = new Database();
@@ -234,32 +351,6 @@ public class DatabaseTests
         long collectionCount = await db.ExecuteScalarInt64Async(
             "SELECT COUNT(*) FROM collection WHERE id = 0 AND gardener_id = 0;");
 
-        Assert.Equal(1L, gardenerCount);
-        Assert.Equal(1L, collectionCount);
-    }
-
-    [Fact]
-    public async Task Initialize_Upgrades_Version_One_Database_With_Default_Collection() {
-        string dbPath = CreateTempDbPath();
-        using (var versionTwoDatabase = new Database()) {
-            versionTwoDatabase.Initialize(dbPath);
-            await versionTwoDatabase.ExecuteNonQueryAsync("""
-                DELETE FROM collection WHERE id = 0;
-                DELETE FROM gardener WHERE id = 0;
-                PRAGMA user_version = 1;
-                """);
-        }
-
-        using var upgradedDatabase = new Database();
-        upgradedDatabase.Initialize(dbPath);
-
-        long version = await upgradedDatabase.ExecuteScalarInt64Async("PRAGMA user_version;");
-        long gardenerCount = await upgradedDatabase.ExecuteScalarInt64Async(
-            "SELECT COUNT(*) FROM gardener WHERE id = 0;");
-        long collectionCount = await upgradedDatabase.ExecuteScalarInt64Async(
-            "SELECT COUNT(*) FROM collection WHERE id = 0 AND gardener_id = 0;");
-
-        Assert.Equal(2L, version);
         Assert.Equal(1L, gardenerCount);
         Assert.Equal(1L, collectionCount);
     }

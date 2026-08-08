@@ -59,17 +59,14 @@ type       INTEGER NOT NULL,
 actor_type INTEGER NOT NULL,
 payload    BLOB    NOT NULL);
 
-CREATE TABLE rule(
-id          INTEGER PRIMARY KEY,
-gardener_id INTEGER REFERENCES gardener(id) ON DELETE CASCADE,
-specimen_id INTEGER REFERENCES specimen(id) ON DELETE CASCADE,
-name        TEXT    NOT NULL,
-source      INTEGER NOT NULL,
-type        INTEGER NOT NULL,
-enabled     INTEGER NOT NULL CHECK(enabled IN(0, 1)),
-payload     BLOB    NOT NULL,
-created_at  INTEGER NOT NULL,
-modified_at INTEGER NOT NULL);
+CREATE TABLE care_rule(
+id               INTEGER PRIMARY KEY,
+specimen_id      INTEGER NOT NULL REFERENCES specimen(id) ON DELETE CASCADE,
+type             INTEGER NOT NULL,
+current_value    INTEGER NOT NULL,
+threshold_value  INTEGER NOT NULL,
+next_trigger     INTEGER NOT NULL,
+trigger_interval INTEGER NOT NULL);
 
 CREATE TABLE alert(
 id           INTEGER PRIMARY KEY,

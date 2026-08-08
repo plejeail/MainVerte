@@ -14,7 +14,7 @@ namespace MainVerte.Core;
 
 public sealed class Database : IDisposable
 {
-    private const long   DatabaseVersion = 2;
+    private const long   DatabaseVersion = 3;
     private const string MigrationPrefix = "MainVerte.Core.Data.Migrations.";
 
     // Producer/consumer infrastructure (explicit, simple)
@@ -104,8 +104,7 @@ public sealed class Database : IDisposable
         }
     }
 
-    private Task<TResult> Enqueue<TResult>(Func<SqliteConnection, TResult> job)
-    {
+    private Task<TResult> Enqueue<TResult>(Func<SqliteConnection, TResult> job) {
         if (!_ready.IsSet) {
             throw new InvalidOperationException("Database not initialized");
         }
@@ -117,8 +116,7 @@ public sealed class Database : IDisposable
         return wrapper.Task();
     }
 
-    private void DatabaseThreadStart()
-    {
+    private void DatabaseThreadStart() {
         Require.NotNull(_databasePath);
 
         SqliteConnection? connection = null;
@@ -195,15 +193,11 @@ public sealed class Database : IDisposable
         string fileName = resourceName[MigrationPrefix.Length..];
 
         int underscoreIndex = fileName.IndexOf('_');
-        if (underscoreIndex <= 0) {
-            throw new InvalidOperationException($"Invalid migration name '{resourceName}'.");
-        }
-
+        Ensure.True(underscoreIndex > 0);
 
         string versionText = fileName[..underscoreIndex];
-        if (!Int64.TryParse(versionText, out long version)) {
-            throw new InvalidOperationException($"Invalid migration version in '{resourceName}'.");
-        }
+        bool versionIsInt = Int64.TryParse(versionText, out long version);
+        Ensure.True(versionIsInt);
 
         return version;
     }
@@ -222,6 +216,7 @@ public sealed class Database : IDisposable
         string[] resourceNames = assembly.GetManifestResourceNames();
         Array.Sort(resourceNames, StringComparer.Ordinal);
 
+        long migratedVersion = currentVersion;
         using SqliteTransaction transaction = connection.BeginTransaction();
         try {
             foreach (string resourceName in resourceNames) {
@@ -236,11 +231,16 @@ public sealed class Database : IDisposable
                     continue;
                 }
 
-                Log.Info($"migrating database from version {version} to {version + 1}");
+                Ensure.True(version == migratedVersion);
+                migratedVersion = version + 1;
+
+                Log.Info($"migrating database from version {version} to {migratedVersion}");
 
                 ExecuteScript(connection, resourceName, transaction);
-                WriteVersion(connection, version + 1, transaction);
             }
+
+            WriteVersion(connection, migratedVersion, transaction);
+            Ensure.True(migratedVersion == softwareVersion);
 
             transaction.Commit();
         } catch {
@@ -253,11 +253,9 @@ public sealed class Database : IDisposable
         Assembly assembly = typeof(Database).Assembly;
 
         using Stream? stream = assembly.GetManifestResourceStream(resourceName);
-        if (stream is null) {
-            throw new InvalidOperationException($"Resource '{resourceName}' not found.");
-        }
+        Ensure.True(stream != null);
 
-        using var reader = new StreamReader(stream);
+        using var reader = new StreamReader(stream!);
         return reader.ReadToEnd();
     }
 
@@ -309,7 +307,7 @@ public sealed class Database : IDisposable
             while (reader.Read()) {
                 string? photoUri = reader.IsDBNull(3) ? null : reader.GetString(3);
                 specimens.Add(new SpecimenSummary(
-                    new MainVerteId(reader.GetInt32(0)),
+                    new MainVerteId(reader.GetInt64(0)),
                     reader.GetString(1),
                     reader.GetString(2),
                     photoUri));
@@ -344,17 +342,19 @@ public sealed class Database : IDisposable
                 return null;
             }
 
-            return ReadSpecimenDetail(reader);
+            SpecimenDetail specimen = ReadSpecimenDetail(reader);
+            return specimen with { Rules = ReadCareRules(connection, specimen.Id) };
         });
     }
 
     public Task<MainVerteId> CreateSpecimenAsync(SpecimenDetail specimen) {
-        ArgumentNullException.ThrowIfNull(specimen);
         ValidateSpecimen(specimen);
 
         return Enqueue(connection => {
             long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            using SqliteTransaction transaction = connection.BeginTransaction();
             using SqliteCommand cmd = connection.CreateCommand();
+            cmd.Transaction = transaction;
             cmd.CommandText = """
                 INSERT INTO specimen (
                     collection_id,
@@ -382,16 +382,21 @@ public sealed class Database : IDisposable
             cmd.Parameters.AddWithValue("$created_at", now);
             cmd.Parameters.AddWithValue("$modified_at", now);
 
-            return new MainVerteId(Convert.ToInt32(cmd.ExecuteScalar()));
+            MainVerteId id = new(Convert.ToInt64(cmd.ExecuteScalar()));
+            WriteCareRules(connection, transaction, id, specimen.Rules);
+            transaction.Commit();
+            return id;
         });
     }
 
     public Task<bool> UpdateSpecimenAsync(SpecimenDetail specimen) {
-        ArgumentNullException.ThrowIfNull(specimen);
+        Require.NotNull(specimen);
         ValidateSpecimen(specimen);
 
         return Enqueue(connection => {
+            using SqliteTransaction transaction = connection.BeginTransaction();
             using SqliteCommand cmd = connection.CreateCommand();
+            cmd.Transaction = transaction;
             cmd.CommandText = """
                 UPDATE specimen
                 SET species_id = $species_id,
@@ -408,14 +413,21 @@ public sealed class Database : IDisposable
                 "$modified_at",
                 DateTimeOffset.UtcNow.ToUnixTimeSeconds());
 
-            return cmd.ExecuteNonQuery() == 1;
+            bool updated = cmd.ExecuteNonQuery() == 1;
+            if (updated) {
+                DeleteCareRules(connection, transaction, specimen.Id);
+                WriteCareRules(connection, transaction, specimen.Id, specimen.Rules);
+            }
+
+            transaction.Commit();
+            return updated;
         });
     }
 
+    [Conditional("DEBUG")]
     private static void ValidateSpecimen(SpecimenDetail specimen) {
-        if (String.IsNullOrWhiteSpace(specimen.DisplayName)) {
-            throw new ArgumentException("Specimen display name cannot be empty.", nameof(specimen));
-        }
+        Require.NotNull(specimen);
+        Require.True(!String.IsNullOrWhiteSpace(specimen.DisplayName));
     }
 
     private static void AddSpecimenParameters(SqliteCommand cmd, SpecimenDetail specimen) {
@@ -435,26 +447,237 @@ public sealed class Database : IDisposable
             specimen.AcquiredAt ?? (object)DBNull.Value);
     }
 
+    private static CareRules ReadCareRules(SqliteConnection connection, MainVerteId specimenId) {
+        var rules = CareRules.Empty;
+        using SqliteCommand cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, specimen_id, type, current_value, threshold_value, next_trigger, trigger_interval
+            FROM care_rule
+            WHERE specimen_id = $specimen_id
+            ORDER BY type;
+            """;
+        cmd.Parameters.AddWithValue("$specimen_id", specimenId.Value);
+
+        using SqliteDataReader reader = cmd.ExecuteReader();
+        while (reader.Read()) {
+            CareRule rule = ReadCareRule(reader);
+            ValidateCareRule(rule);
+            rules[rule.Type] = rule;
+        }
+
+        return rules;
+    }
+
+    private static CareRule ReadCareRule(SqliteDataReader reader) {
+        return new CareRule {
+            Id = new MainVerteId(reader.GetInt64(0)),
+            SpecimenId = new MainVerteId(reader.GetInt64(1)),
+            Type = (CareType)reader.GetInt32(2),
+            CurrentValue = reader.GetInt64(3),
+            ThresholdValue = reader.GetInt64(4),
+            NextTrigger = DateTimeOffset.FromUnixTimeSeconds(reader.GetInt64(5)),
+            TriggerInterval = reader.GetInt32(6),
+        };
+    }
+
+    private static void WriteCareRules(SqliteConnection connection,
+                                       SqliteTransaction transaction,
+                                       MainVerteId specimenId,
+                                       CareRules rules) {
+        for (int index = 0; index < (int)CareType.Count; index++) {
+            var type = (CareType)index;
+            CareRule? rule = rules[type];
+            if (rule == null) {
+                continue;
+            }
+
+            ValidateCareRule(rule, false);
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.Transaction = transaction;
+            cmd.CommandText = """
+                INSERT INTO care_rule (
+                    specimen_id,
+                    type,
+                    current_value,
+                    threshold_value,
+                    next_trigger,
+                    trigger_interval
+                )
+                VALUES (
+                    $specimen_id,
+                    $type,
+                    $current_value,
+                    $threshold_value,
+                    $next_trigger,
+                    $range
+                );
+                """;
+            cmd.Parameters.AddWithValue("$specimen_id", specimenId.Value);
+            cmd.Parameters.AddWithValue("$type", (int)type);
+            cmd.Parameters.AddWithValue("$current_value", rule.CurrentValue);
+            cmd.Parameters.AddWithValue("$threshold_value", rule.ThresholdValue);
+            cmd.Parameters.AddWithValue("$next_trigger", rule.NextTrigger.ToUnixTimeSeconds());
+            cmd.Parameters.AddWithValue("$range", rule.TriggerInterval);
+            cmd.ExecuteNonQuery();
+        }
+    }
+
+    private static void DeleteCareRules(SqliteConnection connection, SqliteTransaction transaction, MainVerteId specimenId) {
+        using SqliteCommand cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = "DELETE FROM care_rule WHERE specimen_id = $specimen_id;";
+        cmd.Parameters.AddWithValue("$specimen_id", specimenId.Value);
+        cmd.ExecuteNonQuery();
+    }
+
+    [Conditional("DEBUG")]
+    private static void ValidateCareRule(CareRule rule, bool withSpecimenId = true) {
+        Require.NotNull(rule);
+        if (withSpecimenId) {
+            Require.True(rule.SpecimenId != MainVerteId.Invalid);
+        }
+        Require.IsInRange(rule.Type);
+        Require.True(rule.TriggerInterval > 0);
+    }
+
+    public Task<MainVerteId> AddCareRuleAsync(CareRule rule) {
+        Require.NotNull(rule);
+        ValidateCareRule(rule);
+
+        return Enqueue(connection => {
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO care_rule (
+                    specimen_id, type, current_value, threshold_value, next_trigger, trigger_interval
+                )
+                VALUES ($specimen_id, $type, $current_value, $threshold_value, $next_trigger, $range)
+                RETURNING id;
+                """;
+            AddCareRuleParameters(cmd, rule);
+            return new MainVerteId(Convert.ToInt64(cmd.ExecuteScalar()));
+        });
+    }
+
+    public Task<bool> RemoveCareRuleAsync(CareRule rule) {
+        Require.NotNull(rule);
+        return Enqueue(connection => {
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = "DELETE FROM care_rule WHERE id = $id;";
+            cmd.Parameters.AddWithValue("$id", rule.Id.Value);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+    }
+
+    public Task<bool> UpdateCareRuleAsync(CareRule rule) {
+        ValidateCareRule(rule);
+
+        return Enqueue(connection => {
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                UPDATE care_rule
+                SET
+                    specimen_id = $specimen_id,
+                    type = $type,
+                    current_value = $current_value,
+                    threshold_value = $threshold_value,
+                    next_trigger = $next_trigger,
+                    trigger_interval = $range
+                WHERE id = $id;
+                """;
+            AddCareRuleParameters(cmd, rule);
+            cmd.Parameters.AddWithValue("$id", rule.Id.Value);
+            return cmd.ExecuteNonQuery() == 1;
+        });
+    }
+
+    public Task<DateTimeOffset?> RescheduleCareRuleNowAsync(MainVerteId ruleId, DateTimeOffset now) {
+        return Enqueue(connection => {
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                UPDATE care_rule
+                SET next_trigger = $now + trigger_interval
+                WHERE id = $id
+                RETURNING next_trigger;
+                """;
+            cmd.Parameters.AddWithValue("$now", now.ToUnixTimeSeconds());
+            cmd.Parameters.AddWithValue("$id", ruleId.Value);
+
+            object? value = cmd.ExecuteScalar();
+            if (value == null || value == DBNull.Value) {
+                return (DateTimeOffset?)null;
+            }
+
+            return DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(value));
+        });
+    }
+
+    public Task<DateTimeOffset?> GetNextTriggerDateAsync() {
+        return Enqueue(connection => {
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = "SELECT MIN(next_trigger) FROM care_rule;";
+            object? value = cmd.ExecuteScalar();
+            if (value == null || value == DBNull.Value) {
+                return (DateTimeOffset?)null;
+            }
+
+            return DateTimeOffset.FromUnixTimeSeconds(Convert.ToInt64(value));
+        });
+    }
+
+    public Task<CareRule[]> GetRulesToProcessBeforeAsync(DateTimeOffset date) {
+        long timestamp = date.ToUnixTimeSeconds();
+        return Enqueue(connection => {
+            using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                SELECT id, specimen_id, type, current_value, threshold_value, next_trigger, trigger_interval
+                FROM care_rule
+                WHERE next_trigger <= $next_trigger
+                ORDER BY next_trigger, id;
+                """;
+            cmd.Parameters.AddWithValue("$next_trigger", timestamp);
+
+            using SqliteDataReader reader = cmd.ExecuteReader();
+            var rules = new List<CareRule>();
+            while (reader.Read()) {
+                CareRule rule = ReadCareRule(reader);
+                ValidateCareRule(rule);
+                rules.Add(rule);
+            }
+
+            return rules.ToArray();
+        });
+    }
+
+    private static void AddCareRuleParameters(SqliteCommand cmd, CareRule rule) {
+        cmd.Parameters.AddWithValue("$specimen_id", rule.SpecimenId.Value);
+        cmd.Parameters.AddWithValue("$type", (int)rule.Type);
+        cmd.Parameters.AddWithValue("$current_value", rule.CurrentValue);
+        cmd.Parameters.AddWithValue("$threshold_value", rule.ThresholdValue);
+        cmd.Parameters.AddWithValue("$next_trigger", rule.NextTrigger.ToUnixTimeSeconds());
+        cmd.Parameters.AddWithValue("$range", rule.TriggerInterval);
+    }
+
     private static SpecimenDetail ReadSpecimenDetail(SqliteDataReader reader) {
         MainVerteId? speciesId = reader.IsDBNull(2)
             ? null
-            : new MainVerteId(reader.GetInt32(2));
+            : new MainVerteId(reader.GetInt64(2));
         string? species = reader.IsDBNull(3) ? null : reader.GetString(3);
         MainVerteId? locationId = reader.IsDBNull(4)
             ? null
-            : new MainVerteId(reader.GetInt32(4));
+            : new MainVerteId(reader.GetInt64(4));
         string? photoUri = reader.IsDBNull(6) ? null : reader.GetString(6);
         long? acquiredAt = reader.IsDBNull(7) ? null : reader.GetInt64(7);
 
         return new SpecimenDetail(
-            new MainVerteId(reader.GetInt32(0)),
-            new MainVerteId(reader.GetInt32(1)),
+            new MainVerteId(reader.GetInt64(0)),
+            new MainVerteId(reader.GetInt64(1)),
             speciesId,
             species,
             locationId,
             reader.GetString(5),
             photoUri,
             acquiredAt,
+            CareRules.Empty,
             reader.GetInt64(8),
             reader.GetInt64(9));
     }

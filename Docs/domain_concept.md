@@ -5,7 +5,7 @@ It is co-canonical with `Docs/domain_definitions.md`.
 
 ## Terminology alignment
 
-This document uses canonical terms from `Docs/domain_definitions.md`: `Collection`, `CollectionState`, `Specimen`, `Species`, `Journal`, `Event`, `Task`, `TaskInstance`, `TaskRule`, `TaskCompletion`, `Alert`, `Notification`, `KnowledgeArticle`, `Advice`, `Source`, `ImportBatch`, `ExportArtifact`, `Device`, `DeviceGroup`, `DeviceReading`, and `DeviceCommand`.
+This document uses canonical terms from `Docs/domain_definitions.md`: `Collection`, `CollectionState`, `Specimen`, `Species`, `Journal`, `Event`, `Task`, `CareRule`, `TaskInstance`, `TaskCompletion`, `Alert`, `Notification`, `KnowledgeArticle`, `Advice`, `Source`, `ImportBatch`, `ExportArtifact`, `Device`, `DeviceGroup`, `DeviceReading`, and `DeviceCommand`.
 
 ## Application capabilities – global use cases
 
@@ -73,7 +73,7 @@ Includes:
 Core entities:
 
 * Task
-* TaskRule
+* CareRule
 * TaskInstance
 * TaskCompletionEvent
 

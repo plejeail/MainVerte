@@ -115,7 +115,7 @@ Individual plant profile with personalized data (display name, pot, current loca
 User-managed label used to categorize and filter specimens, tasks, and knowledge views.
 
 - **Task**:
-Care action definition attached to a specimen or collection context (for example water, fertilize, inspect), with origin and scheduling intent.
+Care action definition attached to a specimen or collection context (for example water, fertilize, inspect), with origin and execution intent.
 
 - **TaskCompletion**:
 Recorded outcome of finishing a `TaskInstance`, including completion timestamp and optional note/media, represented as an `Event`.
@@ -123,8 +123,8 @@ Recorded outcome of finishing a `TaskInstance`, including completion timestamp a
 - **TaskInstance**:
 Concrete scheduled occurrence of a `Task` with due date and status.
 
-- **TaskRule**:
-Recurrence specification that defines how future `TaskInstance` items are generated for a `Task`.
+- **CareRule**:
+Scheduling rule for a care action attached to a specimen. A `CareRule` identifies the care type, stores the current and threshold values used by the rule when applicable, and defines the next trigger and recurrence range. When a rule is due, the application emits or records the corresponding care action and advances the next trigger according to the rule.
 
 ## Co-canonical maintenance rule
 
