@@ -1117,7 +1117,7 @@ sealed class SpecimenDetailsFragment : Fragment
                 }
             }
 
-            activity.ConfigureToolbar(new ToolbarConfiguration(GetToolbarTitleResource(_viewModel.Mode), true), actions);
+            activity.ConfigureToolbar(new ToolbarConfiguration(GetToolbarTitleResource(_viewModel.Mode), ToolbarLeftButton.GoBack), actions);
         }
     }
 

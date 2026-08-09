@@ -191,7 +191,7 @@ public static class CrashReport
                     File.Delete(reportPath);
                 }
             } catch (Exception e) {
-                Platform.LogWarning("Unable to remove corrupted report");
+                Platform.LogWarning($"Unable to remove corrupted report: {e.Message}");
             }
 #endif
         }

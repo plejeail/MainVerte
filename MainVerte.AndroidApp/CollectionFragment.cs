@@ -17,7 +17,7 @@ sealed class CollectionFragment : Fragment
 {
     private Binding.fragment_collection? _binding;
     private SpecimenAdapter? _adapter;
-    public readonly ToolbarConfiguration ToolbarConfiguration = new(Resource.String.collection_title, false);
+    public readonly ToolbarConfiguration ToolbarConfiguration = new(Resource.String.collection_title, ToolbarLeftButton.Logo);
 
     public override View OnCreateView(LayoutInflater inflater, ViewGroup? container, Bundle? savedInstanceState) {
         Require.NotNull(inflater);

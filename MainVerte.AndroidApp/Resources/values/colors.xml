@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 
 <resources>
+	<color name="mv_splash_bg">#EAF4E3</color>
+    <color name="mv_icon_bg">#EAF4E3</color>
     <color name="mv_primary">#176B4D</color>
     <color name="mv_primary_dark">#0E4A34</color>
+    <color name="mv_toolbar">#176B4D</color>
     <color name="mv_on_primary">#FFFFFF</color>
     <color name="mv_secondary">#006E5C</color>
     <color name="mv_on_secondary">#FFFFFF</color>

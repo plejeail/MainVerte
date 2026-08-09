@@ -35,12 +35,19 @@ static class Services
     }
 }
 
-sealed record ToolbarConfiguration(int TitleResourceId, bool ShowBackButton);
+enum ToolbarLeftButton
+{
+    None,
+    GoBack,
+    Logo,
+}
+
+sealed record ToolbarConfiguration(int TitleResourceId, ToolbarLeftButton LeftButton);
 sealed record ToolbarMenuAction(int Id, string Title, int IconResourceId, Action Execute);
 
 [Activity(Label = "@string/app_name",
           MainLauncher = true,
-          Theme =  "@style/MainVerteTheme")]
+          Theme =  "@style/MainVerte.Splash")]
 sealed class MainActivity : AppCompatActivity
 {
     private Binding.activity_main? _binding;
@@ -48,8 +55,10 @@ sealed class MainActivity : AppCompatActivity
 
     protected override void OnCreate(Bundle? savedInstanceState) {
         var activityWatch = Stopwatch.StartNew();
-        Platform.SetImplementation(new AndroidPlatform(this));
 
+        AndroidX.Core.SplashScreen.SplashScreen.InstallSplashScreen(this);
+
+        Platform.SetImplementation(new AndroidPlatform(this));
         if (!Services.Initialized) { // Run once
             var serviceWatch = Stopwatch.StartNew();
             CrashReport.ProcessPending();
@@ -136,7 +145,7 @@ sealed class MainActivity : AppCompatActivity
         Require.NotNull(SupportActionBar);
 
         SupportActionBar!.Title = GetString(toolbar.TitleResourceId);
-        SupportActionBar!.SetDisplayHomeAsUpEnabled(toolbar.ShowBackButton);
+        SupportActionBar!.SetDisplayHomeAsUpEnabled(toolbar.LeftButton == ToolbarLeftButton.GoBack);
         _toolbarActions = actions ?? Array.Empty<ToolbarMenuAction>();
         InvalidateOptionsMenu();
     }
