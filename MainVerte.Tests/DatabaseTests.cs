@@ -346,8 +346,7 @@ public class DatabaseTests
         using var db     = new Database();
         db.Initialize(dbPath);
 
-        long gardenerCount = await db.ExecuteScalarInt64Async(
-            "SELECT COUNT(*) FROM gardener WHERE id = 0;");
+        long gardenerCount = await db.ExecuteScalarInt64Async("SELECT COUNT(*) FROM gardener WHERE id = 0;");
         long collectionCount = await db.ExecuteScalarInt64Async(
             "SELECT COUNT(*) FROM collection WHERE id = 0 AND gardener_id = 0;");
 

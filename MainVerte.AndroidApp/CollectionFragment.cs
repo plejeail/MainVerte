@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Threading.Tasks;
+using Android.Graphics;
 using Android.OS;
 using Android.Util;
 using Android.Views;
+using Android.Widget;
 using AndroidX.Fragment.App;
 using AndroidX.RecyclerView.Widget;
 
@@ -65,7 +67,6 @@ sealed class CollectionFragment : Fragment
     private async Task LoadSpecimensAsync() {
         try {
             var specimens = await Services.Database.ListSpecimensAsync();
-
             if (_binding == null || _adapter == null) {
                 return;
             }
@@ -83,7 +84,6 @@ sealed class CollectionFragment : Fragment
         }
 
         float screenWidthDp = metrics.WidthPixels / metrics.Density;
-
         return Math.Max(2, (int)(screenWidthDp / 180));
     }
 
@@ -116,11 +116,34 @@ sealed class SpecimenViewHolder : RecyclerView.ViewHolder
         _binding.specimen_species.Text = specimen.Species;
 
         Android.Net.Uri? photoUri = PhotoStorage.GetDisplayUri(specimen.PhotoUri);
-        if (photoUri != null) {
-            _binding.specimen_image.SetImageURI(photoUri);
-        } else {
+        if (photoUri == null) {
             _binding.specimen_image.SetImageDrawable(null);
+            return;
         }
+
+        MainVerteId requestedId = specimen.Id;
+        var imageView = _binding.specimen_image;
+
+        imageView.Post(() => {
+            _ = LoadImageAsync(imageView, photoUri, requestedId);
+        });
+    }
+
+    private async Task LoadImageAsync(ImageView imageView, Android.Net.Uri photoUri, MainVerteId requestedId) {
+        int width = imageView.Width;
+        int height = imageView.Height;
+
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        Bitmap? bitmap = await Task.Run(() => BitmapLoader.LoadThumbnail(imageView.Context, photoUri, width, height));
+
+        if (Id != requestedId) {
+            bitmap?.Recycle();
+            return;
+        }
+        imageView.SetImageBitmap(bitmap);
     }
 }
 

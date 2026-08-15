@@ -5,12 +5,73 @@ using System.Threading;
 using System.Threading.Tasks;
 using Android.App;
 using Android.Content;
+using Android.Graphics;
 using AndroidX.Core.Content;
 using MainVerte.Core;
 using AndroidUri = Android.Net.Uri;
+using Path = System.IO.Path;
 
 namespace MainVerte.AndroidApp;
 
+
+static class BitmapLoader
+{
+    public static Bitmap? LoadThumbnail(Context? context, Android.Net.Uri uri, int requestedWidth, int requestedHeight) {
+        if (context == null) {
+            return null;
+        }
+
+        BitmapFactory.Options options = new() {
+            InJustDecodeBounds = true,
+        };
+
+        using (Stream? stream = context.ContentResolver?.OpenInputStream(uri)) {
+            if (stream == null) {
+                return null;
+            }
+
+            BitmapFactory.DecodeStream(stream, null, options);
+        }
+
+        options.InSampleSize = CalculateInSampleSize(options,
+                                                     requestedWidth,
+                                                     requestedHeight);
+        options.InJustDecodeBounds = false;
+        using (Stream? stream = context.ContentResolver?.OpenInputStream(uri)) {
+            if (stream == null) {
+                return null;
+            }
+
+            return BitmapFactory.DecodeStream(stream, null, options);
+        }
+    }
+
+    public static int DpToPx(Context context, float dp) {
+        float density = context.Resources?.DisplayMetrics?.Density ?? 1f;
+        return (int)MathF.Round(dp * density);
+    }
+
+
+    private static int CalculateInSampleSize(BitmapFactory.Options options, int requestedWidth, int requestedHeight) {
+        int height = options.OutHeight;
+        int width = options.OutWidth;
+
+        int inSampleSize = 1;
+
+        if (height > requestedHeight || width > requestedWidth) {
+            int halfHeight = height / 2;
+            int halfWidth = width / 2;
+
+            while (halfHeight / inSampleSize >= requestedHeight &&
+                   halfWidth  / inSampleSize >= requestedWidth) {
+                inSampleSize *= 2;
+            }
+        }
+
+        return inSampleSize;
+    }
+
+}
 
 static class PhotoStorage
 {
