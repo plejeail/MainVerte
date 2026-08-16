@@ -3,7 +3,7 @@
 <resources>
     <style name="MainVerte.Splash" parent="Theme.SplashScreen">
         <item name="windowSplashScreenBackground">@color/mv_splash_bg</item>
-        <item name="windowSplashScreenAnimatedIcon">@drawable/mainverte_icon</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/icon_logo_mainverte</item>
         <item name="postSplashScreenTheme">@style/MainVerte.Theme</item>
     </style>
     <style name="MainVerte.Theme"

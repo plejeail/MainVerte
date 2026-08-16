@@ -989,7 +989,7 @@ sealed class SpecimenDetailsFragment : Fragment
         case CareType.WateringDate: return Resource.String.care_rule_watering_title;
         case CareType.Repotting:    return Resource.String.care_rule_repotting_title;
         case CareType.Fertilizing:  return Resource.String.care_rule_fertilizing_title;
-        case CareType.TurningPot:   return Resource.String.care_rule_turning_pot_title;
+        case CareType.Rotation:     return Resource.String.care_rule_turning_pot_title;
         case CareType.Count:
         default: throw new ArgumentOutOfRangeException(nameof(type), type, null);
         }
@@ -999,8 +999,8 @@ sealed class SpecimenDetailsFragment : Fragment
         switch (type) {
         case CareType.WateringDate: return Resource.Drawable.icon_care_watering;
         case CareType.Repotting:    return Resource.Drawable.icon_care_repotting;
-        case CareType.Fertilizing:  return Android.Resource.Drawable.IcMenuAdd;
-        case CareType.TurningPot:   return Android.Resource.Drawable.IcMenuRotate;
+        case CareType.Fertilizing:  return Resource.Drawable.icon_care_fertilizer;
+        case CareType.Rotation:     return Resource.Drawable.icon_care_rotation;
         case CareType.Count:
         default: throw new ArgumentOutOfRangeException(nameof(type), type, null);
         }

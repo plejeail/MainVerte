@@ -5,9 +5,9 @@ MainVerte is a C#/.NET Android plant-care app. The current implementation covers
 ## Repository map
 
 ```text
-MainVerte.AndroidApp (net10.0-android, API 27+) --> MainVerte.Core (net10.0)
-MainVerte.Tests       (xUnit, net10.0)           --> MainVerte.Core
-MainVerte.Core                                  --> Microsoft.Data.Sqlite
+MainVerte.AndroidApp (net11.0-android, API 27+) --> MainVerte.Core (net11.0)
+MainVerte.Tests      (xUnit, net11.0)           --> MainVerte.Core
+MainVerte.Core       (net11.0)                  --> Microsoft.Data.Sqlite
                                                     SQLitePCLRaw.bundle_e_sqlite3
 ```
 
@@ -15,7 +15,7 @@ MainVerte.Core                                  --> Microsoft.Data.Sqlite
 - `MainVerte.AndroidApp/`: Android UI using AppCompat, AndroidX Fragments, RecyclerView, and Material Components.
 - `MainVerte.Tests/`: Core and persistence tests using xUnit.
 - `Docs/`: normative domain, database, scheduler, and icon documentation.
-- `raw_resources/`: source SVG assets used to produce application artwork and custom icons.
+- `Design/`: source assets used to produce application resources (artworks, icons, etc).
 - `MainVerte.sln`: references the three projects above. There is no separate `MainVerte/` residual project.
 
 ## Current implementation status
@@ -91,4 +91,4 @@ dotnet build MainVerte.AndroidApp\MainVerte.AndroidApp.csproj
 dotnet build MainVerte.sln
 ```
 
-The repository targets .NET 10. Check the installed SDK and Android workload before attributing toolchain failures to source changes.
+The repository targets .NET 11.

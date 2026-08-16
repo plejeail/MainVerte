@@ -72,7 +72,7 @@ public class CareScheduler(Database database)
         case CareType.WateringDate:
         case CareType.Repotting:
         case CareType.Fertilizing:
-        case CareType.TurningPot:
+        case CareType.Rotation:
             return true;
         case CareType.Count:
         default:

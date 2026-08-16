@@ -19,7 +19,7 @@ public enum CareType
     WateringDate    = 0,
     Repotting   = 1,
     Fertilizing = 2,
-    TurningPot = 3,
+    Rotation = 3,
     Count,
 }
 
