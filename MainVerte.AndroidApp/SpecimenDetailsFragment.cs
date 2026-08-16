@@ -337,9 +337,13 @@ sealed class SpecimenDetailsFragment : Fragment
                                                     new ResultCallback(HandleCameraResult));
         base.OnCreate(savedInstanceState);
 
-        _viewModel = new ViewModelProvider(this)
-            .Get(Java.Lang.Class.FromType(typeof(SpecimenDetailsViewModel))) as SpecimenDetailsViewModel
-            ?? throw new InvalidOperationException("Could not create specimen details view model.");
+        var vm = new ViewModelProvider(this)
+                         .Get(Java.Lang.Class.FromType(typeof(SpecimenDetailsViewModel))) as SpecimenDetailsViewModel;
+        if (vm == null) {
+            throw new InvalidOperationException("Could not create specimen details view model.");
+        }
+
+        _viewModel = vm;
         _viewModel.StateChanged += HandleViewModelStateChanged;
 
         SpecimenDetailsMode mode = ReadModeArgument();
@@ -993,8 +997,8 @@ sealed class SpecimenDetailsFragment : Fragment
 
     private static int GetCareRuleIcon(CareType type) {
         switch (type) {
-        case CareType.WateringDate: return Android.Resource.Drawable.IcMenuToday;
-        case CareType.Repotting:    return Android.Resource.Drawable.IcMenuEdit;
+        case CareType.WateringDate: return Resource.Drawable.icon_care_watering;
+        case CareType.Repotting:    return Resource.Drawable.icon_care_repotting;
         case CareType.Fertilizing:  return Android.Resource.Drawable.IcMenuAdd;
         case CareType.TurningPot:   return Android.Resource.Drawable.IcMenuRotate;
         case CareType.Count:

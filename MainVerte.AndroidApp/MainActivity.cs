@@ -26,7 +26,7 @@ static class Services
         Initialized = true;
 
         string? dbPath = Application.Context.GetDatabasePath("mainverte.db")?.AbsolutePath;
-        if (dbPath is null) {
+        if (dbPath == null) {
             throw new InvalidOperationException("Database path is null");
         }
 
@@ -182,13 +182,16 @@ sealed class MainActivity : AppCompatActivity
     }
 
     public override bool OnCreateOptionsMenu(IMenu? menu) {
-        if (menu is null) {
+        if (menu == null) {
             return false;
         }
 
         foreach (ToolbarMenuAction action in _toolbarActions) {
-            IMenuItem item = menu.Add(IMenu.None, action.Id, IMenu.None, action.Title)
-                          ?? throw new InvalidOperationException("Could not create toolbar menu item.");
+            IMenuItem? item = menu.Add(IMenu.None, action.Id, IMenu.None, action.Title);
+            if (item == null) {
+                throw new InvalidOperationException("Could not create toolbar menu item.");
+            }
+
             item.SetIcon(action.IconResourceId);
             item.SetShowAsAction(ShowAsAction.Always);
         }

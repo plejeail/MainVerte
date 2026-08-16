@@ -441,7 +441,7 @@ public sealed class Database : IDisposable
         cmd.Parameters.AddWithValue("$display_name", specimen.DisplayName);
         cmd.Parameters.AddWithValue(
             "$photo_uri",
-            specimen.PhotoUri is null ? DBNull.Value : specimen.PhotoUri);
+            specimen.PhotoUri == null ? DBNull.Value : specimen.PhotoUri);
         cmd.Parameters.AddWithValue(
             "$acquired_at",
             specimen.AcquiredAt ?? (object)DBNull.Value);
