@@ -1,0 +1,24 @@
+# MainVerte: correctness-focused C++20 checks.
+# Keep this small; clang-format owns formatting and AGENTS.md owns design rules.
+
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  -bugprone-exception-escape,
+  misc-*,
+  -misc-const-correctness,
+  -misc-use-internal-linkage,
+  performance-*,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  portability-simd-intrinsics
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+SystemHeaders: false
+FormatStyle: file
+
+CheckOptions:
+  - key: misc-unused-parameters.StrictMode
+    value: 'false'
