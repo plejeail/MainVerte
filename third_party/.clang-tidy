@@ -1,0 +1,8 @@
+# disable checks for third-party libraries
+Checks: >
+  -*
+
+WarningsAsErrors: ''
+HeaderFilterRegex: '.*'
+SystemHeaders: false
+FormatStyle: file

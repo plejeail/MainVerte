@@ -6,11 +6,15 @@ Checks: >
   clang-analyzer-*,
   bugprone-*,
   -bugprone-exception-escape,
+  -bugprone-signed-bitwise,
   misc-*,
   -misc-const-correctness,
+  -misc-include-cleaner,
+  -misc-non-private-member-variables-in-classes,
   -misc-use-internal-linkage,
   performance-*,
   modernize-*,
+  -modernize-use-scoped-lock,
   -modernize-use-trailing-return-type,
   portability-simd-intrinsics
 

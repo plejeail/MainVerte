@@ -1,0 +1,60 @@
+// src/database.h -------------------------------------------------------------
+// DATABASE MANAGEMENT
+//
+// Internal Core component owning a SQLite connection and a worker thread.
+// Initialize synchronously with an application-supplied path, then call start().
+// The worker executes queued jobs in FIFO order and sleeps when the queue is
+// empty. Producers may submit concurrently; SQLite access stays on the worker.
+// Jobs must not throw or retain the connection handle.
+//
+// submit(job) reports acceptance, not completion. Jobs deliver their own results
+// on the worker thread; captured data must remain valid until execution finishes.
+//
+// Initialize, start and destroy on the owner thread. Stop producers before
+// destruction, which drains accepted jobs, joins the worker and closes SQLite.
+//
+// SQLite is compiled with SQLITE_THREADSAFE=0. This application uses one
+// Database instance; no other connection may access SQLite concurrently.
+//
+// ------------------------------------------------------------- mainverte/core
+#pragma once
+
+#include "move_only_function.h"
+
+struct sqlite3;
+
+
+class Database {
+public:
+    using Job = mv::MoveOnlyFunction<void(sqlite3*)>;
+
+    enum class State : int8_t { Uninitialized, Initialized, Running, Stopping, };
+    enum class Error : int8_t { NotRunning };
+
+    ~Database();
+
+    bool initialize(const std::string& path);
+
+    void start();
+
+    // Internal persistence jobs run serially on the worker. Never retain the handle.
+    // Jobs must not throw; they deliver their own results on the worker thread.
+    bool submit(Job job);
+
+private:
+    void thread_loop();
+
+    template <ssize_t software_version> bool migrate_database(ssize_t current_version);
+
+    State                   state = State::Uninitialized;
+    std::mutex              mutex;
+    std::condition_variable wake;
+    sqlite3*                handle = nullptr;
+    std::deque<Job>         jobs;
+    std::thread             thread;
+};
+
+namespace detail {
+bool configure_database(sqlite3* handle);
+bool migrate_script(sqlite3* handle, std::string_view script, ssize_t version);
+}

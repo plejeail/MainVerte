@@ -1,12 +1,34 @@
 #include "mainverte_core.h"
 
-#include <memory>
+#include "database.h"
+#include "services.h"
+#include "tools.h"
 
-using namespace core;
+
+std::unique_ptr<Database> service::database;
 
 
-std::unique_ptr<IPlatform> g_platform;
+bool mv::Services::initialize(std::string_view database_path) {
+    static bool initialized = false;
+    assert(!initialized);
+    if (initialized) {
+        return true;
+    }
 
-void core::initialize_platform(std::unique_ptr<IPlatform> implementation) {
-    g_platform.swap(implementation);
+    assert(service::database == nullptr);
+    service::database = std::make_unique<Database>();
+    if (!service::database->initialize(std::string(database_path))) {
+        log_err("services: database initialization failed");
+        service::database.reset();
+        return false;
+    }
+
+    service::database->start();
+
+    initialized = true;
+    return true;
+}
+
+mv::Services::~Services() {
+    service::database.reset();
 }

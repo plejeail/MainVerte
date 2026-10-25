@@ -1,25 +1,59 @@
-# MainVerte agent instructions
+## Project and boundaries
 
-## Project map
+- MainVerte is a gardening journal for Android (ARM64/x86_64) and Windows desktop.
+- Stack: C++23, Qt >= 6.12, Qt Quick/QML, CMake >= 3.25, native SQLite C API, doctest.
+- `core/include/`: public Core API; `core/src/`: implementation; `core/tests/`: doctest tests via CTest.
+- `app_qt/src/`: Qt application and platform services; `app_qt/qml/`: QML UI (module `MainVerte`).
+- `third_party/`: vendored SQLite and doctest. Targets: `mainverte_core`, `mainverte_core_tests`, `appMainVerte`.
 
-- Gardening app: Android ARM64/x86_64 and Windows Desktop. C++23, Qt >= 6.12, Qt Quick/QML, CMake >= 3.25.
-- `core/include/`: public API; `core/src/`: implementation; `core/tests/`: doctest tests registered with CTest.
-- `app_qt/src/`: Qt app and platform integration; `app_qt/qml/`: UI, QML module `MainVerte`.
-- `third_party/`: native SQLite C library and doctest. Main targets: `mainverte_core`, `mainverte_core_tests`, `appMainVerte`.
+## Non-negotiable architecture
 
-## Architecture
+- Core owns business logic and persistence; it must remain independent of Qt, Android, Windows and JNI.
+- `app_qt/` owns presentation, platform integration, paths and conversion to/from Qt types. Dependencies point from app to Core, never backward.
+- QML can own transient visual state and local interactions, not database rules or business invariants.
+- App supplies platform-specific inputs such as the database path. Introduce a service interface only for a demonstrated need.
+- Access SQLite via its C API; contain `sqlite3*` and `sqlite3_stmt*` in persistence implementation, not public domain APIs.
+- SQLite is a permitted Core dependency; doctest is test-only. Do not add Qt SQL, an ORM, or other dependencies without concrete justification.
+- Target state: Core builds and tests without Qt or Android SDK. **Present limitation:** root CMake unconditionally adds `app_qt/`, and `core/` is not a standalone CMake project. Do not claim standalone builds work, invent presets/options, or fix this outside an assigned task.
 
-- Keep Core Qt/platform independent: no Qt types in its API; no direct Windows, Android or JNI API calls. App depends on Core, never the reverse. SQLite is an allowed Core dependency; doctest is test-only.
-- Core owns business logic and persistence. `app_qt/` owns presentation, Qt conversions and platform services. QML may handle visual state and local interactions.
-- App supplies environment-specific inputs, including the database path. Add service functions/interfaces only for concrete needs.
-- Use SQLite's C API; keep handles and implementation details inside persistence code. Justify any Qt SQL or ORM introduction.
-- Required end state: configure, build and test Core with SQLite/doctest without Qt or mobile SDKs. Explicit portable dependencies are compatible with Core independence. See current build limitation below.
+## Engineering style
 
-## Build and validation
+- Prefer direct code, local reasoning, explicit state and simple data structures. Keep the set of possible behaviors small.
+- Avoid speculative abstractions, general frameworks, SOLID/DDD/Clean Architecture boilerplate, dependency-injection containers and interfaces with one implementation.
+- Add classes, inheritance, polymorphism and layers only when solving a concrete problem. Prefer ordinary functions and concrete types when sufficient.
+- Make ownership and lifetime explicit; use RAII for SQLite connections, statements and other resources. Do not introduce `shared_ptr` without a real shared-ownership requirement. Respect Qt/QML object ownership.
+- **Code policy:** do not introduce `throw`, `try`/`catch`, `dynamic_cast` or `typeid` into project Core or app code. Exceptions and RTTI remain enabled at compile time for now; do not change build flags or vendored code to enforce this policy.
+- Use explicit error results and preserve useful diagnostic context. Check SQLite return codes. Do not use blanket `noexcept` on potentially throwing call chains.
+- Core returns errors; the app translates relevant failures into visible Qt/QML state or user notifications. No UI messages or Qt signals in Core. For async failures, define who receives the result and on which thread.
+- Prefer correctness and clarity over speculative micro-optimizations. Measure before adding performance complexity.
+- Follow surrounding naming, formatting and coding conventions; do not reformat unrelated code.
 
-Run from repository root with compiler and Qt >= 6.12 kit configured. Use separate build directories per kit/platform/ABI; never reuse a cache across toolchains.
+## SQLite and persistent data
 
-Desktop, multi-configuration generator:
+- Use prepared statements and bound parameters for values. Finalize statements and close connections on every path; use RAII.
+- App resolves the database location; do not rely on working directory or developer-machine absolute paths.
+- Schema upgrades must be versioned migrations, preserve existing user data and have tests. Use transactions for multi-step atomic changes; check commit/rollback results.
+- Enable and verify foreign-key enforcement on each connection where required.
+- The intended SQLite design is single-threaded (`SQLITE_THREADSAFE=0`). Never silently introduce concurrent SQLite access; document ownership and thread affinity before adding asynchronous work.
+- Keep long-running work off the Qt UI thread without introducing unused threading infrastructure.
+- Never delete or recreate a user's existing database as a migration shortcut.
+
+## Working agreement
+
+- Before edits: read relevant code, callers and applicable nested `AGENTS.md`; inspect `git status` and preserve uncommitted changes.
+- For research, review or planning requests, do **not** edit files. For implementation requests, make the smallest coherent change that solves the complete task.
+- Infer reversible local implementation details; ask before choosing semantics that alter user-visible behavior, public API compatibility or persistent data.
+- Do not refactor, rename, format or upgrade dependencies outside the requested scope. Do not edit vendored third-party code unless specifically asked.
+- Do not silently weaken compiler warnings, tests or build settings to obtain a green build.
+- Add focused regression tests for behavior changes and bug fixes. Prefer runnable evidence to assertions that a change is correct.
+- Before handoff, inspect the diff and run relevant checks. Report what actually ran, what failed, what was not verified and why. Distinguish existing failures from introduced ones.
+- No commits, pushes or destructive repository operations unless explicitly requested.
+
+## Build and verification
+
+Use separate CMake build directories for each platform, compiler and Android ABI. Never reuse a CMake cache across toolchains. Execute commands from repository root, with a suitable Qt >= 6.12 kit configured.
+
+Desktop with a multi-config generator:
 
 ```powershell
 cmake -S . -B build/desktop -DBUILD_TESTING=ON
@@ -27,46 +61,18 @@ cmake --build build/desktop --config Debug --target appMainVerte mainverte_core_
 ctest --test-dir build/desktop -C Debug --output-on-failure --no-tests=error
 ```
 
-Single-configuration generator: add `-DCMAKE_BUILD_TYPE=Debug` when configuring; omit `--config Debug` and `-C Debug`. If Qt discovery fails, set `CMAKE_PREFIX_PATH` to the installed kit prefix; never commit personal paths.
+For a single-config generator, configure with `-DCMAKE_BUILD_TYPE=Debug` and omit `--config Debug` / `-C Debug`. If Qt is not found, supply the appropriate kit prefix through `CMAKE_PREFIX_PATH`; never commit local paths.
 
-**Current limitation:** root CMake always adds `app_qt/`, requiring Qt even when building only Core. `core/` is not a standalone CMake project. Do not claim Qt-free validation or invent options/presets. Fix this when tasked with Core build independence; do not expand unrelated work.
+Validation expectations:
 
-| Change | Required checks |
-|---|---|
-| Business logic | Build Core; run relevant tests. Add useful regression coverage for bug fixes; an empty suite does not validate behavior. |
-| Qt/QML | Build app; exercise affected interaction when possible. Report if UI was not run. |
-| CMake/dependencies | Check fresh configuration and affected targets; do not change options to hide failures. |
-| Android | Use matching kit/toolchain; report ABI built and device/emulator checks. Desktop builds do not validate Android. |
-| Documentation only | Check diff, paths and command consistency; no build required. |
+- **Core/business logic:** build Core, execute relevant doctest/CTest cases, and add useful coverage for bugs. An empty test suite is not evidence.
+- **Qt/QML:** build app and exercise affected UI when possible. If UI cannot be run, say so.
+- **CMake/dependencies:** verify fresh configuration and affected targets; do not mask errors with configuration changes.
+- **Android:** use the actual Android kit/ABI; report ABI, build and device/emulator checks. Desktop success does not establish Android success.
+- **Documentation only:** inspect diff, references and commands; compilation generally unnecessary.
 
-## Change workflow
+## Documentation
 
-- Before editing: read applicable instructions, inspect `git status`, affected code and callers. Check for more specific `AGENTS.md` instructions before working in subdirectories.
-- Preserve existing changes, including uncommitted work; never revert/overwrite developer work for convenience.
-- Make the smallest coherent change that fully satisfies the request. Avoid unrelated refactoring, renaming and formatting.
-- Reuse existing mechanisms. Justify new dependencies with concrete need and platform impact. Modify third-party sources only when explicitly tasked.
-- Decide reversible local details autonomously; clarify unresolved choices affecting expected behavior, compatibility or persistent data.
-- Review final diff and run relevant checks. Distinguish introduced failures from pre-existing issues; do not silently expand scope to fix the latter.
-- Report outcome, checks actually run and unverified items with reasons. Proposed commands are not completed checks.
-
-## Coding conventions
-
-- Follow consistent local style. Prefer simple data structures and direct functions. Add classes, polymorphism or layers only for identified needs; do not apply SOLID, DDD or patterns by default.
-- Use RAII, including SQLite connections/statements. Make ownership/lifetimes explicit across Core/Qt/QML; respect Qt ownership in the app.
-- Do not introduce no `throw`, `try`/`catch`, `dynamic_cast` or `typeid` in app/Core code. Do not modify third-party libraries to enforce this.
-- Return explicit error codes, with result/context as needed; check SQLite return values. Avoid blanket `noexcept`: called operations may still throw.
-- Return synchronous errors to callers; use explicit notifications for asynchronous failures when needed. App converts results into messages, Qt/QML state or user notifications. Core neither uses Qt signals nor displays errors.
-- Make new CMake includes, dependencies and options target-scoped; justify `PRIVATE`/`PUBLIC` visibility.
-- Add performance complexity only for an identified constraint; measure when optimization motivates a change.
-
-## Platforms and persistence
-
-- Isolate platform differences in the app, near the affected service. Resolve storage locations there; do not rely on the working directory or absolute development paths.
-- Keep long operations off the UI thread. When introducing async work, define lifetimes, notification thread and SQLite connection access without unnecessary infrastructure.
-- Schema changes require explicit migration and tests preserving existing data. Bind SQL values; use transactions when multiple writes must be atomic.
-
-## Documentation and scope
-
-- Keep durable rules/common commands here. Put setup, SDK/NDK kits, deployment and lengthy procedures in `README.md` or referenced technical documents when available.
-- Keep task goals/acceptance criteria in the request or issue; this file is neither a session log nor a roadmap.
-- Update relevant documentation when changing a documented command/constraint. Report intent/implementation mismatches without starting out-of-scope migrations.
+- This file contains durable repository policy, architecture constraints and known commands—not a task log, roadmap or generic C++ tutorial.
+- Keep SDK/NDK installation, onboarding and extensive deployment procedures in `README.md` or dedicated documents.
+- Update documentation when changing a documented command or constraint; report mismatches beyond task scope rather than silently expanding work.

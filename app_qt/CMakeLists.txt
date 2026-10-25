@@ -12,6 +12,14 @@ file(GLOB_RECURSE APP_QML_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/qml/*.qml"
 )
 
+if(ANDROID)
+    list(FILTER APP_CPP_FILES EXCLUDE REGEX
+        "/platform[.]desktop[.](cpp|h)$")
+else()
+    list(FILTER APP_CPP_FILES EXCLUDE REGEX
+        "/platform[.]android[.](cpp|h)$")
+endif()
+
 list(SORT APP_QML_FILES)
 
 foreach(qml_file IN LISTS APP_QML_FILES)
