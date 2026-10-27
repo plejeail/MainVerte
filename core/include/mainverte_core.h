@@ -1,29 +1,51 @@
 // include/core.h -------------------------------------------------------------
 // MAINVERTE_CORE MAIN HEADER
 //
-// The consuming application implements mv::Platform functions and owns the
+// The consuming application implements mv::platform functions and owns the
 // mv::Services lifetime, calling initialize() before using Core services.
 //
 //-------------------------------------------------------------- mainverte/core
 #pragma once
 
 #include <cstdint>
+#include <expected>
+#include <string>
 #include <string_view>
+
+#include "move_only_function.h"
 
 
 namespace mv {
 
-/// Severity of a message emitted through Platform::log().
+/// Severity of a message emitted through platform::log().
 enum class Level : int8_t { Dbg, Inf, Wrn, Err, };
 
 /// Platform-specific facilities supplied by the application.
-namespace Platform {
+namespace platform {
 /// Sends a message to the application's logging facility.
 ///
 /// The application provides the definition for each target platform. The
 /// message is borrowed for the duration of this call and must not be retained.
 /// Implementations should preserve the requested severity.
 void log(Level severity, std::string_view msg);
+
+/// Enqueues a user callback on the application's chosen execution thread.
+///
+/// The application supplies this function. Core may call it from worker threads
+/// or the calling thread; the implementation must support concurrent calls.
+/// Ownership of the callback and its captures is transferred to the dispatcher.
+/// Enqueue it without waiting for execution or invoking it inline, and synchronize
+/// delivery so that writes preceding dispatch are visible to the callback.
+/// During normal operation, execute each callback exactly once. The dispatcher
+/// and callbacks must not let exceptions escape.
+///
+/// Keep the dispatcher available until Core has finished producing callbacks,
+/// including while Services is being destroyed. Before stopping the destination
+/// event loop, drain pending callbacks or explicitly abandon them during shutdown.
+/// Discarding a callback does not cancel an accepted Core operation or undo writes.
+/// Callback captures must remain valid until execution or destruction; consumers
+/// must protect references to objects that may disappear before delivery.
+void dispatch_callback(MoveOnlyFunction<void()> callback);
 };
 
 /// Controls the lifetime of Core services on behalf of the application.
@@ -55,4 +77,25 @@ public:
     /// Destruction still releases any partially initialized services.
     bool initialize(std::string_view database_path);
 };
-}
+
+/// internal object id type
+using id_t = int64_t;
+
+struct MainverteError {
+    enum class Code : uint8_t { NotRunning, Database };
+    Code code;
+    std::string message;
+};
+
+struct Gardener {
+    id_t id;
+    std::string name;
+};
+
+using CreateGardenerResult = std::expected<Gardener, MainverteError>;
+
+/// Inserts a gardener and delivers its ID and name through platform::dispatch_callback.
+/// Requires initialized Services and a nonempty callback. Errors, including refused
+/// submissions, are delivered through the same dispatcher. The name is owned by Core.
+void create_gardener(std::string name, MoveOnlyFunction<void(CreateGardenerResult)> callback);
+}  // namespace mv

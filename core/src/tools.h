@@ -22,22 +22,22 @@
 
 MV_INLINE void log_dbg(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::Platform::log(mv::Level::Dbg, message);
+    mv::platform::log(mv::Level::Dbg, message);
 }
 
 MV_INLINE void log_inf(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::Platform::log(mv::Level::Inf, message);
+    mv::platform::log(mv::Level::Inf, message);
 }
 
 MV_INLINE void log_wrn(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::Platform::log(mv::Level::Wrn, message);
+    mv::platform::log(mv::Level::Wrn, message);
 }
 
 MV_INLINE void log_err(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::Platform::log(mv::Level::Err, message);
+    mv::platform::log(mv::Level::Err, message);
 }
 
 template<typename... Args> requires (sizeof...(Args) > 0)
@@ -58,6 +58,14 @@ MV_NOINLINE void log_wrn(std::format_string<Args...> format, Args&&... args) {
 template<typename... Args> requires (sizeof...(Args) > 0)
 MV_NOINLINE void log_err(std::format_string<Args...> format, Args&&... args) {
     log_err(std::format(format, std::forward<Args>(args)...));
+}
+
+template<typename T>
+void dispatch_result(mv::MoveOnlyFunction<void(T)> callback, T result) {
+    mv::platform::dispatch_callback(
+        [callback = std::move(callback), result = std::move(result)]() mutable {
+        callback(std::move(result));
+    });
 }
 
 class Stopwatch {

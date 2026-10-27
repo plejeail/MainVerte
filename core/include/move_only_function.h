@@ -51,14 +51,17 @@ public:
     MoveOnlyFunction(Function&& function) {  // NOLINT(misc-explicit-constructor)
         using F = std::decay_t<Function>;
         if constexpr (std::is_pointer_v<F> || std::is_member_pointer_v<F>) {
-            if (function == nullptr) return;
+            if (function == nullptr) {
+                return;
+            }
         }
+
         target = std::make_unique<StoredTarget<F>>(std::forward<Function>(function));
     }
 
-    MoveOnlyFunction(const MoveOnlyFunction&) = delete;
-    MoveOnlyFunction& operator=(const MoveOnlyFunction&) = delete;
-    MoveOnlyFunction(MoveOnlyFunction&&) noexcept = default;
+    MoveOnlyFunction(const MoveOnlyFunction&)                = delete;
+    MoveOnlyFunction& operator=(const MoveOnlyFunction&)     = delete;
+    MoveOnlyFunction(MoveOnlyFunction&&) noexcept            = default;
     MoveOnlyFunction& operator=(MoveOnlyFunction&&) noexcept = default;
 
     MoveOnlyFunction& operator=(std::nullptr_t) noexcept {
@@ -66,7 +69,9 @@ public:
         return *this;
     }
 
-    explicit operator bool() const noexcept { return static_cast<bool>(target); }
+    explicit operator bool() const noexcept {
+        return static_cast<bool>(target);
+    }
 
     Result operator()(Args... args) {
         assert(target);

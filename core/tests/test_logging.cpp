@@ -9,7 +9,7 @@ std::string logged_message;
 int log_count = 0;
 }
 
-void mv::Platform::log(Level severity, std::string_view message) {
+void mv::platform::log(Level severity, std::string_view message) {
     logged_level = severity;
     logged_message = message;
     ++log_count;

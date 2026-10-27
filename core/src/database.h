@@ -22,15 +22,19 @@
 #include "move_only_function.h"
 
 struct sqlite3;
+struct sqlite3_stmt;
 
 
 class Database {
 public:
+    using statement_ptr = std::unique_ptr<sqlite3_stmt, int(*)(sqlite3_stmt*)>;
+
     using Job = mv::MoveOnlyFunction<void(sqlite3*)>;
 
     enum class State : int8_t { Uninitialized, Initialized, Running, Stopping, };
     enum class Error : int8_t { NotRunning };
 
+    Database();
     ~Database();
 
     bool initialize(const std::string& path);
@@ -40,6 +44,8 @@ public:
     // Internal persistence jobs run serially on the worker. Never retain the handle.
     // Jobs must not throw; they deliver their own results on the worker thread.
     bool submit(Job job);
+
+    int64_t create_gardener(const std::string& name);
 
 private:
     void thread_loop();
@@ -52,6 +58,7 @@ private:
     sqlite3*                handle = nullptr;
     std::deque<Job>         jobs;
     std::thread             thread;
+    statement_ptr           statement_create_gardener;
 };
 
 namespace detail {

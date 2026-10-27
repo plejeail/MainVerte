@@ -7,6 +7,7 @@
 
 namespace {
 static constexpr ssize_t DATABASE_VERSION = mv::sql::scripts.size();
+static const auto TRANSIENT = SQLITE_TRANSIENT;  // NOLINT(performance-no-int-to-ptr)
 
 const char* to_string(Database::State state) {
     switch (state) {
@@ -107,6 +108,17 @@ MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_v
     }
     return true;
 }
+
+bool prepare_statement(sqlite3* handle, Database::statement_ptr& ptr, const char* query) {
+    if (ptr != nullptr) {
+        return sqlite3_reset(ptr.get()) == SQLITE_OK;
+    }
+
+    sqlite3_stmt* statement;
+    int rc = sqlite3_prepare_v2(handle, query, -1, &statement, nullptr);
+    ptr.reset(statement);
+    return rc == SQLITE_OK;
+}
 }  // namespace
 
 bool detail::configure_database(sqlite3* handle) {
@@ -154,6 +166,10 @@ bool detail::migrate_script(sqlite3* handle, std::string_view script, ssize_t ve
 
     return true;
 }
+
+Database::Database()
+: statement_create_gardener(nullptr, sqlite3_finalize)
+{}
 
 Database::~Database() {
     if (thread.joinable()) {
@@ -300,4 +316,27 @@ void Database::thread_loop() {
         job = nullptr;  // Destroy captures outside the queue lock as well.
         lock.lock();
     }
+}
+
+int64_t Database::create_gardener(const std::string& name) {
+    static constexpr const char* sql = "INSERT INTO gardener(display_name, created_at) VALUES (?1, unixepoch())";
+
+    if (!prepare_statement(handle, statement_create_gardener, sql)) {
+        // assert(false);
+        return -1;
+    }
+
+    auto* statement = statement_create_gardener.get();
+    auto str_size = static_cast<sqlite3_uint64>(name.size());
+    int rc = sqlite3_bind_text64(statement, 1, name.data(), str_size, TRANSIENT, SQLITE_UTF8);
+    if (rc != SQLITE_OK) {
+        return -1;
+    }
+
+    rc = sqlite3_step(statement);
+    if (rc != SQLITE_DONE) {
+        return -1;
+    }
+
+    return sqlite3_last_insert_rowid(handle);
 }

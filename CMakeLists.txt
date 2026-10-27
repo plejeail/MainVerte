@@ -19,3 +19,10 @@ endif()
 add_subdirectory(third_party)
 add_subdirectory(core)
 add_subdirectory(app_qt)
+
+include(CheckIPOSupported)
+check_ipo_supported(LANGUAGES CXX)
+set_property(
+    TARGET mainverte_core
+    PROPERTY INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE
+)

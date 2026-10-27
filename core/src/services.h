@@ -8,14 +8,18 @@
 // ------------------------------------------------------------- mainverte/core
 #pragma once
 
-class Database;
+class  Database;
+struct Settings;
 
 
-// Services are initialized and destroyed exclusively in core.cpp.
-// The application controls their lifetime through mv::Services,
+// Services are initialized and destroyed exclusively in services.cpp.
+// The consummer of core controls their lifetime through mv::Services,
 // declared in mainverte_core.h.
+// Services shall not be used before the consummer call to Services::initialize
+// or after the destruction of the consummer instance of Services.
 //
 // Internal consumers borrow these services; they must not reset or move them.
 namespace service {
-extern std::unique_ptr<Database> database;
+Settings& settings();
+Database& database();
 }  // service
