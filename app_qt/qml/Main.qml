@@ -5,30 +5,46 @@ import QtQuick.Layouts
 ApplicationWindow {
     id: window
 
-    readonly property bool desktopNavigation: Qt.platform.os !== "android"
     property int currentSection: 0
+    readonly property bool desktopNavigation: Qt.platform.os !== "android"
 
     function showSection(index: int) {
         if (currentSection === index)
-            return
-        currentSection = index
-        pages.replace(index === 0 ? collectionPage : settingsPage)
+            return;
+        currentSection = index;
+        pages.replace(index === 0 ? collectionPage : settingsPage);
     }
 
-    width: 640
     height: 480
+    title: Ts.get(TextId.App_Title)
     visible: true
-    title: qsTr("MainVerte")
+    width: 640
 
+    footer: TabBar {
+        currentIndex: window.currentSection
+        visible: !window.desktopNavigation
+
+        TabButton {
+            text: Ts.get(TextId.Collection_Title)
+
+            onClicked: window.showSection(0)
+        }
+
+        TabButton {
+            text: Ts.get(TextId.Parameters_Title)
+
+            onClicked: window.showSection(1)
+        }
+    }
     header: ToolBar {
         RowLayout {
             anchors.fill: parent
 
             Label {
-                text: (pages.currentItem as Page)?.title ?? ""
-                font.bold: true
                 Layout.fillWidth: true
                 Layout.leftMargin: 12
+                font.bold: true
+                text: (pages.currentItem as Page)?.title ?? Ts.get(TextId.App_Title)
             }
         }
     }
@@ -38,28 +54,30 @@ ApplicationWindow {
         spacing: 0
 
         Frame {
-            visible: window.desktopNavigation
-            Layout.preferredWidth: 180
             Layout.fillHeight: true
+            Layout.preferredWidth: 180
+            visible: window.desktopNavigation
 
             ColumnLayout {
                 anchors.fill: parent
 
                 Button {
-                    text: qsTr("Collection")
                     Layout.fillWidth: true
-                    checkable: true
                     autoExclusive: true
+                    checkable: true
                     checked: window.currentSection === 0
+                    text: Ts.get(TextId.Collection_Title)
+
                     onClicked: window.showSection(0)
                 }
 
                 Button {
-                    text: qsTr("Paramètres")
                     Layout.fillWidth: true
-                    checkable: true
                     autoExclusive: true
+                    checkable: true
                     checked: window.currentSection === 1
+                    text: Ts.get(TextId.Parameters_Title)
+
                     onClicked: window.showSection(1)
                 }
 
@@ -71,34 +89,24 @@ ApplicationWindow {
 
         StackView {
             id: pages
-            Layout.fillWidth: true
+
             Layout.fillHeight: true
+            Layout.fillWidth: true
             initialItem: collectionPage
-        }
-    }
-
-    footer: TabBar {
-        visible: !window.desktopNavigation
-        currentIndex: window.currentSection
-
-        TabButton {
-            text: qsTr("Collection")
-            onClicked: window.showSection(0)
-        }
-
-        TabButton {
-            text: qsTr("Paramètres")
-            onClicked: window.showSection(1)
         }
     }
 
     Component {
         id: collectionPage
-        CollectionPage {}
+
+        CollectionPage {
+        }
     }
 
     Component {
         id: settingsPage
-        SettingsPage {}
+
+        SettingsPage {
+        }
     }
 }

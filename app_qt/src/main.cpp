@@ -4,12 +4,12 @@
 #include <QObject>
 #include <QQmlApplicationEngine>
 #include <QStandardPaths>
-#include <QTranslator>
 #include <Qt>
 
 #include <cstdlib>
 
 #include "mainverte_core.h"
+#include "translator.h"
 
 
 namespace {
@@ -35,19 +35,17 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
         return EXIT_FAILURE;
     }
 
-    QTranslator translator;
-    const QString language = QLocale::system().name();
-    if (translator.load(QLocale(language), "MainVerte", "_", ":/i18n")) {
-        app.installTranslator(&translator);
-    } else {
-        qWarning() << "failed to load translation files";
+    if (!ts::select_system_language()) {
+        qWarning() << "failed to select preferred language";
     }
+
+    qInfo() << "ts selected language" << ts::current_language();
 
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app,    &on_object_creation_failed,
                      Qt::QueuedConnection);
-    engine.loadFromModule("MainVerte", "Page_create_gardener");
+    engine.loadFromModule("MainVerte", "Main");
 
     return QGuiApplication::exec();
 }

@@ -1,123 +1,41 @@
-
-function(update_translation)
-    set(oneValueArgs TARGET TS_DIR)
-    set(multiValueArgs TRANSLATABLE_QML)
-
-    cmake_parse_arguments(
-        PARSE_ARGV 0 arg
-        ""
-        "${oneValueArgs}"
-        "${multiValueArgs}"
-    )
-
-    if(NOT arg_TARGET OR NOT arg_TS_DIR)
-        message(FATAL_ERROR
-            "update_translation requires TARGET and TS_DIR"
-        )
+function(generate_translations)
+    cmake_parse_arguments(PARSE_ARGV 0 arg "" "TARGET" "DICTIONARIES")
+    if(NOT arg_TARGET OR NOT TARGET "${arg_TARGET}" OR NOT arg_DICTIONARIES
+       OR arg_UNPARSED_ARGUMENTS OR arg_KEYWORDS_MISSING_VALUES)
+        message(FATAL_ERROR "generate_translations requires TARGET and ordered DICTIONARIES")
     endif()
 
-    if(NOT TARGET "${arg_TARGET}")
-        message(FATAL_ERROR
-            "Target '${arg_TARGET}' does not exist"
-        )
-    endif()
-
-    if(NOT arg_TRANSLATABLE_QML)
-        message(FATAL_ERROR
-            "No translatable QML files provided"
-        )
-    endif()
-
-    # Find existing translation files
-    file(GLOB TS_FILES CONFIGURE_DEPENDS
-        "${arg_TS_DIR}/*.ts"
-    )
-
-    if(NOT TS_FILES)
-        message(FATAL_ERROR
-            "No .ts files found in ${arg_TS_DIR}"
-        )
-    endif()
-
-    # Convert QML paths to absolute paths
-    set(QML_FILES)
-    foreach(qml IN LISTS arg_TRANSLATABLE_QML)
-        get_filename_component(qml_abs "${qml}"
-            ABSOLUTE
-            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
-        )
-
-        list(APPEND QML_FILES "${qml_abs}")
+    # The interpreter runs on the build host, also when targeting Android.
+    find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+    set(generator "${PROJECT_SOURCE_DIR}/tools/generate_translations.py")
+    set(dictionaries)
+    foreach(dictionary IN LISTS arg_DICTIONARIES)
+        get_filename_component(dictionary "${dictionary}" ABSOLUTE
+            BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+        list(APPEND dictionaries "${dictionary}")
     endforeach()
 
-    # Unique stamp for this target
-    set(UPDATE_STAMP
-        "${CMAKE_CURRENT_BINARY_DIR}/${arg_TARGET}_translations.stamp"
-    )
-
-    # QML changed -> update all TS files
+    set(output_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    set(headers "${output_dir}/generated_translations.hpp")
+    set(stamp "${output_dir}/translations.stamp")
     add_custom_command(
-        OUTPUT "${UPDATE_STAMP}"
-
-        COMMAND Qt6::lupdate
-        ${QML_FILES}
-        -locations none
-        -ts ${TS_FILES}
-
-        COMMAND "${CMAKE_COMMAND}" -E touch
-        "${UPDATE_STAMP}"
-
-        DEPENDS ${QML_FILES}
-
-        COMMENT "Updating translations for ${arg_TARGET}"
+        OUTPUT "${stamp}"
+        BYPRODUCTS ${headers}
+        COMMAND "${Python3_EXECUTABLE}" "${generator}"
+            --output-dir "${output_dir}" ${dictionaries}
+        COMMAND "${CMAKE_COMMAND}" -E touch "${stamp}"
+        DEPENDS "${generator}" ${dictionaries}
+        COMMENT "Generating embedded translations for ${arg_TARGET}"
         VERBATIM
     )
+    add_custom_target("${arg_TARGET}_generate_translations" DEPENDS "${stamp}")
+    add_dependencies("${arg_TARGET}" "${arg_TARGET}_generate_translations")
+    target_sources("${arg_TARGET}" PRIVATE ${headers})
+    target_include_directories("${arg_TARGET}" PRIVATE "${output_dir}")
 
-    set(QM_FILES)
-
-    # TS changed -> compile corresponding QM
-    foreach(ts IN LISTS TS_FILES)
-
-        get_filename_component(name "${ts}" NAME_WE)
-
-        set(qm
-            "${CMAKE_CURRENT_BINARY_DIR}/${name}.qm"
-        )
-
-        add_custom_command(
-            OUTPUT "${qm}"
-
-            COMMAND Qt6::lrelease
-            "${ts}"
-            -qm "${qm}"
-
-            DEPENDS
-                "${ts}"
-                "${UPDATE_STAMP}"
-
-            COMMENT "Compiling ${name}.qm"
-            VERBATIM
-        )
-
-        list(APPEND QM_FILES "${qm}")
-
-    endforeach()
-
-    add_custom_target("${arg_TARGET}_compile_translations"
-        DEPENDS ${QM_FILES}
-    )
-
-    add_dependencies(
-        "${arg_TARGET}"
-        "${arg_TARGET}_compile_translations"
-    )
-
-    # Embed translations in Qt resources
-    qt_add_resources("${arg_TARGET}"
-        "${arg_TARGET}_translations"
-        PREFIX "/i18n"
-        BASE "${CMAKE_CURRENT_BINARY_DIR}"
-        FILES ${QM_FILES}
-    )
-
+    if(BUILD_TESTING)
+        add_test(NAME translation_generator
+            COMMAND "${Python3_EXECUTABLE}" -B
+                "${PROJECT_SOURCE_DIR}/tools/tests/test_generate_translations.py")
+    endif()
 endfunction()

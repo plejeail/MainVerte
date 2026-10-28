@@ -1,5 +1,5 @@
 import QtQuick.Controls
 
 Page {
-    title: qsTr("Paramètres")
+    title: Ts.get(TextId.Parameters_Title)
 }

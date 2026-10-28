@@ -1,11 +1,8 @@
-find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2 LinguistTools)
+find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
 
 include(cmake/translate.cmake)
 
-qt_standard_project_setup(REQUIRES 6.12
-    I18N_SOURCE_LANGUAGE en
-    I18N_TRANSLATED_LANGUAGES fr
-)
+qt_standard_project_setup(REQUIRES 6.12)
 
 file(GLOB_RECURSE APP_CPP_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -52,10 +49,11 @@ qt_add_qml_module(appMainVerte
     QML_FILES ${APP_QML_FILES}
 )
 
-update_translation(
+generate_translations(
     TARGET appMainVerte
-    TS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/translations"
-    TRANSLATABLE_QML ${APP_QML_FILES}
+    DICTIONARIES
+        translations/MainVerte_en.dict
+        translations/MainVerte_fr.dict
 )
 
 set_target_properties(appMainVerte PROPERTIES

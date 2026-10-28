@@ -1,5 +1,5 @@
 import QtQuick.Controls
 
 Page {
-    title: qsTr("Collection")
+    title: Ts.get(TextId.Collection_Title)
 }
