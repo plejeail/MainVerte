@@ -15,9 +15,13 @@ file(GLOB_RECURSE APP_QML_FILES CONFIGURE_DEPENDS
 if(ANDROID)
     list(FILTER APP_CPP_FILES EXCLUDE REGEX
         "desktop[.](cpp|h)$")
+    list(FILTER APP_QML_FILES EXCLUDE REGEX
+        "desktop[.]qml$")
 else()
     list(FILTER APP_CPP_FILES EXCLUDE REGEX
         "android[.](cpp|h)$")
+    list(FILTER APP_QML_FILES EXCLUDE REGEX
+        "android[.]qml$")
 endif()
 
 list(SORT APP_QML_FILES)
