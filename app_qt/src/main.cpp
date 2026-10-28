@@ -1,9 +1,10 @@
-#include <QDebug>
 #include <QDir>
 #include <QGuiApplication>
+#include <QLocale>
 #include <QObject>
 #include <QQmlApplicationEngine>
 #include <QStandardPaths>
+#include <QTranslator>
 #include <Qt>
 
 #include <cstdlib>
@@ -34,11 +35,19 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
         return EXIT_FAILURE;
     }
 
+    QTranslator translator;
+    const QString language = QLocale::system().name();
+    if (translator.load(QLocale(language), "MainVerte", "_", ":/i18n")) {
+        app.installTranslator(&translator);
+    } else {
+        qWarning() << "failed to load translation files";
+    }
+
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app,    &on_object_creation_failed,
                      Qt::QueuedConnection);
-    engine.loadFromModule("MainVerte", "Main");
+    engine.loadFromModule("MainVerte", "Page_create_gardener");
 
     return QGuiApplication::exec();
 }
