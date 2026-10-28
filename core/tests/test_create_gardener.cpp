@@ -26,7 +26,9 @@ void deliver_completions() {
         std::lock_guard lock(completion_mutex);
         pending.swap(completions);
     }
-    for (auto& callback : pending) callback();
+    for (auto& callback : pending) {
+        callback();
+    }
 }
 
 int execute_on_worker(const char* sql) {
@@ -36,7 +38,9 @@ int execute_on_worker(const char* sql) {
             completed.set_value(sqlite3_exec(handle, sql, nullptr, nullptr, nullptr));
         })) return SQLITE_MISUSE;
     // Joining Services during stack unwinding also completes any accepted job.
-    if (result.wait_for(std::chrono::seconds(5)) != std::future_status::ready) return SQLITE_BUSY;
+    if (result.wait_for(std::chrono::seconds(5)) != std::future_status::ready) {
+        return SQLITE_BUSY;
+    }
     return result.get();
 }
 }
@@ -47,8 +51,55 @@ void mv::platform::dispatch_callback(MoveOnlyFunction<void()> callback) {
 }
 
 TEST_CASE("create_gardener persists names and dispatches success and database errors") {
+    struct DatabaseFile {
+        std::filesystem::path directory = std::filesystem::temp_directory_path() / std::format(
+            "mainverte-services-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+        ~DatabaseFile() {
+            std::error_code error;
+            std::filesystem::remove_all(directory, error);
+            CHECK_FALSE(error);
+        }
+    } file;
+    const auto utf8 = (file.directory / "database.db").u8string();
+    const std::string filename(utf8.begin(), utf8.end());
+    {
+        Database seed;
+        REQUIRE(seed.initialize(filename));
+        seed.start();
+        std::promise<int> completed;
+        auto result = completed.get_future();
+        REQUIRE(seed.submit([completed = std::move(completed)](sqlite3* handle) mutable {
+            completed.set_value(sqlite3_exec(handle,
+                "INSERT INTO gardener VALUES(42, 'Seed', 123);"
+                "INSERT INTO collection VALUES(73, 42, 'Collection', 123, 123);"
+                "UPDATE settings SET current_gardener_id=42, current_collection_id=73;",
+                nullptr, nullptr, nullptr));
+        }));
+        REQUIRE(result.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
+        REQUIRE(result.get() == SQLITE_OK);
+    }
     mv::Services services;
-    REQUIRE(services.initialize(":memory:"));
+    REQUIRE(services.initialize(filename));
+    auto settings = services.settings();
+    CHECK(settings.current_gardener_id == 42);
+    CHECK(settings.current_collection_id == 73);
+    settings.current_gardener_id = 0;
+    CHECK(services.settings().current_gardener_id == 42);
+    REQUIRE(services.save_settings(settings));
+    CHECK(services.settings().current_gardener_id == 42);
+    REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
+    deliver_completions();
+    CHECK(services.settings().current_gardener_id == 0);
+    CHECK(services.settings().current_collection_id == 73);
+    REQUIRE(execute_on_worker(
+        "CREATE TRIGGER check_settings BEFORE INSERT ON gardener BEGIN "
+        "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM settings WHERE current_gardener_id IS NULL "
+        "AND current_collection_id=73) THEN RAISE(ABORT, 'settings not saved') END; END;") == SQLITE_OK);
+    REQUIRE(services.save_settings({42, 999}));
+    REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
+    deliver_completions();
+    CHECK(services.settings().current_gardener_id == 0);
+    CHECK(services.settings().current_collection_id == 73);
     const auto caller = std::this_thread::get_id();
     std::optional<mv::GardenerResult> received;
     int calls = 0;
@@ -74,8 +125,8 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     // A trigger checks the first row and its timestamp on the SQLite worker.
     REQUIRE(execute_on_worker(
         "CREATE TRIGGER check_previous BEFORE INSERT ON gardener BEGIN "
-        "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM gardener WHERE id = 1 "
-        "AND display_name = 'MV''); DROP TABLE gardener; --' "
+        "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM gardener WHERE "
+        "display_name = 'MV''); DROP TABLE gardener; --' "
         "AND created_at > 0) THEN RAISE(ABORT, 'missing previous gardener') END; END;") == SQLITE_OK);
     mv::create_gardener("Second", callback);
     REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
@@ -96,6 +147,11 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     CHECK(received->error().message.find("test rejection") != std::string::npos);
     CHECK(calls == 3);
 
+    REQUIRE(services.save_settings({}));
+    REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
+    deliver_completions();
+    CHECK(services.settings().current_gardener_id == 0);
+    CHECK(services.settings().current_collection_id == 0);
     REQUIRE(execute_on_worker("DROP TABLE gardener;") == SQLITE_OK);
     mv::create_gardener("Missing table", callback);
     REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);

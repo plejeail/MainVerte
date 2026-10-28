@@ -13,6 +13,7 @@
 
 #include "move_only_function.h"
 #include "definitions.h"
+#include "settings.h"
 
 
 namespace mv {
@@ -76,6 +77,16 @@ public:
     /// Returns false on failure; do not use Core services in that case.
     /// Destruction still releases any partially initialized services.
     bool initialize(std::string_view database_path);
+
+    /// Returns a copy of the loaded settings. Requires successful initialization.
+    /// Call on the owner thread, as for save_settings().
+    Settings settings() const;
+
+    /// Queues a write on the database worker; returns whether the job was accepted.
+    /// On success, updates the in-memory copy through platform::dispatch_callback.
+    /// No completion notification is emitted to the caller.
+    /// Requires successful initialization and a call on the owner thread.
+    bool save_settings(const Settings& settings);
 
 private:
     bool initialized{false};

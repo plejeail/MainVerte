@@ -1,4 +1,5 @@
 #include "services.h"
+#include "mainverte_core.h"
 
 #include <cassert>
 #include <expected>
@@ -8,15 +9,12 @@
 #include <string_view>
 #include <utility>
 
-#include "mainverte_core.h"
+#include <sqlite3.h>
 
 #include "database.h"
 #include "definitions.h"
 #include "move_only_function.h"
-#include "settings.h"
 #include "tools.h"
-
-#include <sqlite3.h>
 
 
 namespace {
@@ -29,12 +27,12 @@ std::unique_ptr<ServicesImpl> services_instance;  // NOLINT
 }  // namespace
 
 Settings& service::settings() {
-    assert(services_instance);
+    assert(services_instance != nullptr);
     return services_instance->settings;
 }
 
 Database& service::database() {
-    assert(services_instance);
+    assert(services_instance != nullptr);
     return services_instance->database;
 }
 
@@ -55,6 +53,12 @@ bool mv::Services::initialize(std::string_view database_path) {
         return false;
     }
 
+    auto settings = database.read_settings();
+    if (!settings) {
+        log_err("services: settings loading failed");
+        return false;
+    }
+    services_instance->settings = *settings;
     database.start();
 
     return true;
@@ -64,7 +68,27 @@ mv::Services::~Services() {
     services_instance.reset();
 }
 
+mv::Settings mv::Services::settings() const {
+    assert(services_instance != nullptr);
+    return services_instance->settings;
+}
+
+bool mv::Services::save_settings(const Settings& settings) {
+    assert(services_instance != nullptr);
+    auto& database = services_instance->database;
+    return database.submit([&database, settings](sqlite3*) {
+        if (database.write_settings(settings)) {
+            mv::platform::dispatch_callback([settings] {
+                if (services_instance) {
+                    services_instance->settings = settings;
+                }
+            });
+        }
+    });
+}
+
 bool mv::create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback) {
+    assert(services_instance != nullptr);
     assert(callback);
     if (name.size() == 0 || name.size() > 30) {
         return false;

@@ -8,10 +8,12 @@
 // ------------------------------------------------------------- mainverte/core
 #pragma once
 
+#include "settings.h"
+
 class  Database;
-struct Settings;
 
 
+using Settings = mv::Settings;
 // Services are initialized and destroyed exclusively in services.cpp.
 // The consummer of core controls their lifetime through mv::Services,
 // declared in mainverte_core.h.
