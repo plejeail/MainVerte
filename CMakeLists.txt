@@ -8,6 +8,8 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+option(BUILD_QT_APP "build a qt application using the core app" ON)
+
 add_library(project_warnings INTERFACE)
 
 if(MSVC)
@@ -18,7 +20,9 @@ endif()
 
 add_subdirectory(third_party)
 add_subdirectory(core)
-add_subdirectory(app_qt)
+if (BUILD_QT_APP)
+    add_subdirectory(app_qt)
+endif()
 
 include(CheckIPOSupported)
 check_ipo_supported(LANGUAGES CXX)
