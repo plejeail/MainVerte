@@ -1,3 +1,15 @@
 App_Title,MainVerte
 Collection_Title,Collection
 Parameters_Title,Paramètres
+Gardener_Slogan,Cultivons votre espace
+Gardener_Profile,Faisons connaissance. Comment souhaitez-vous être appelé ?
+Gardener_NameLabel,Nom du jardinier
+Gardener_NamePlaceholder,Votre nom ou pseudo
+Gardener_Privacy,Vos données restent sur votre appareil.
+Gardener_Busy,Création de votre jardin…
+Gardener_Create,Créer votre espace
+Gardener_NameRequired,Indique un nom pour continuer.
+Gardener_NameTooLong,Le nom doit contenir au plus 30 octets UTF-8.
+Gardener_ServiceUnavailable,Le service de sauvegarde n’est pas disponible.
+Gardener_CreateFailed,Impossible de créer ce jardinier. Réessaie.
+Gardener_SaveFailed,Impossible de sauvegarder la sélection. Réessaie.

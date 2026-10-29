@@ -11,7 +11,7 @@
 
 namespace {
 constexpr ts::TextId First_Id = static_cast<ts::TextId>(0);
-constexpr int Text_Count = mv::i18n::languages[0].texts.size();
+constexpr int Text_Count = static_cast<int>(ts::TextId::Count);
 mv::i18n::Language selected_language = mv::i18n::languages[0];
 }
 

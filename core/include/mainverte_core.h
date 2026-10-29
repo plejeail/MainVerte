@@ -78,23 +78,32 @@ public:
     /// Destruction still releases any partially initialized services.
     bool initialize(std::string_view database_path);
 
-    /// Returns a copy of the loaded settings. Requires successful initialization.
-    /// Call on the owner thread, as for save_settings().
-    Settings settings() const;
-
-    /// Queues a write on the database worker; returns whether the job was accepted.
-    /// On success, updates the in-memory copy through platform::dispatch_callback.
-    /// No completion notification is emitted to the caller.
-    /// Requires successful initialization and a call on the owner thread.
-    bool save_settings(const Settings& settings);
-
 private:
     bool initialized{false};
 };
+
+
+        /// Returns a copy of the loaded settings. Requires successful initialization.
+        /// Call on the owner thread, as for save_settings().
+[[nodiscard]] Settings settings();
+
+        /// Queues a write on the database worker; returns whether the job was accepted.
+        /// On success, updates the in-memory copy through platform::dispatch_callback.
+        /// An optional callback receives persistence success on the owner thread,
+        /// including false for refused submissions.
+        /// Requires successful initialization and a call on the owner thread.
+bool save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callback = {});
 
 /// Inserts a gardener and delivers its ID and name through platform::dispatch_callback.
 /// Requires initialized Services and a nonempty callback. Errors, including refused
 /// submissions, are delivered through the same dispatcher. The name is owned by Core.
 bool create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback);
+
+/// Atomically creates and selects a gardener, clearing the current collection.
+/// Updates the in-memory selection on the owner thread before delivering success.
+/// Requires initialized Services, an owner-thread call and a nonempty callback.
+/// Empty names return false without a callback, as for create_gardener(). Other
+/// errors are delivered through platform::dispatch_callback; false means refused.
+bool create_and_select_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback);
 
 }  // namespace mv

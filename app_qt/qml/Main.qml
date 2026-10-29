@@ -15,10 +15,34 @@ ApplicationWindow {
         pages.replace(index === 0 ? collectionPage : settingsPage);
     }
 
-    height: 480
     title: Ts.get(TextId.App_Title)
-    visible: true
-    width: 640
+    visible: false
+
+    Component.onCompleted: {
+        if (window.desktopNavigation) {
+            Qt.callLater(function () {
+                window.x = window.Screen.virtualX + (window.Screen.width - window.width) / 2;
+                window.y = window.Screen.virtualY + (window.Screen.height - window.height) / 2;
+                window.visible = true;
+            });
+        } else {
+            window.visible = true;
+        }
+    }
+
+    Binding {
+        property: "width"
+        target: window
+        value: 640
+        when: window.desktopNavigation
+    }
+
+    Binding {
+        property: "height"
+        target: window
+        value: 480
+        when: window.desktopNavigation
+    }
 
     footer: TabBar {
         currentIndex: window.currentSection

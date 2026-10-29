@@ -15,7 +15,6 @@
 #include <utility>
 
 #include <sqlite3.h>
-#include <limits>
 
 #include "sql_scripts.hpp"
 #include "tools.h"
@@ -37,16 +36,16 @@ const char* to_string(Database::State state) {
     return "";
 }
 
-MV_NOINLINE std::string_view get_error(int error_code) {
-    assert(error_code > 0);
-    auto* data = sqlite3_errstr(error_code);
+MV_NOINLINE std::string_view get_error(int code) {
+    assert(code > 0 && code < 1'000'000);
+    auto* data = sqlite3_errstr(code);
+    assert(data != nullptr);
     return {data, strlen(data)};
 }
 
 MV_INLINE bool execute(sqlite3* handle, const char* sql) {
     assert(handle != nullptr);
     assert(sql != nullptr);
-
     auto res = sqlite3_exec(handle, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
     return res;
 }
@@ -60,6 +59,7 @@ MV_INLINE bool end_transaction(sqlite3* handle) {
 }
 
 std::optional<size_t> get_database_version(sqlite3* handle) {
+    assert(handle != nullptr);
     sqlite3_stmt* stmt = nullptr;
 
     int rc = sqlite3_prepare_v2(handle, "PRAGMA user_version;", -1, &stmt, nullptr);
@@ -88,11 +88,16 @@ std::optional<size_t> get_database_version(sqlite3* handle) {
 }
 
 MV_INLINE bool set_database_version(sqlite3* handle, size_t version) {
+    assert(version < 1'000'000);
     const std::string update_version = std::format("PRAGMA user_version = {};", version);
     return execute(handle, update_version.c_str());
 }
 
 MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_view expected) {
+    assert(handle != nullptr);
+    assert(query != nullptr);
+    assert(!expected.empty());
+
     sqlite3_stmt* raw = nullptr;
     const int prepared = sqlite3_prepare_v2(handle, query, -1, &raw, nullptr);
     std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> statement(raw, &sqlite3_finalize);
@@ -121,10 +126,14 @@ MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_v
         log_err("DB: cannot finalize {}: {}", query, sqlite3_errmsg(handle));
         return false;
     }
+
     return true;
 }
 
 bool prepare_statement(sqlite3* handle, Database::statement_ptr& ptr, const char* query) {
+    assert(handle != nullptr);
+    assert(query != nullptr);
+
     if (ptr != nullptr) {
         return true;
     }
@@ -137,15 +146,15 @@ bool prepare_statement(sqlite3* handle, Database::statement_ptr& ptr, const char
 }  // namespace
 
 bool detail::configure_database(sqlite3* handle) {
-    const int configured = sqlite3_exec(handle,
-        "PRAGMA foreign_keys = ON;"
-        "PRAGMA journal_mode = WAL;"
-        "PRAGMA synchronous = NORMAL;"
-        "PRAGMA cache_size = -8192;"
-        "PRAGMA temp_store = MEMORY;"
-        "PRAGMA busy_timeout = 3000;"
-        "PRAGMA optimize = 0x10002;", nullptr, nullptr, nullptr);
-    if (configured != SQLITE_OK) {
+    const bool configured = execute(handle,
+            "PRAGMA foreign_keys = ON;"
+            "PRAGMA journal_mode = WAL;"
+            "PRAGMA synchronous = NORMAL;"
+            "PRAGMA cache_size = -8192;"
+            "PRAGMA temp_store = MEMORY;"
+            "PRAGMA busy_timeout = 3000;"
+            "PRAGMA optimize = 0x10002;");
+    if (!configured) {
         log_err("DB: cannot configure PRAGMA: {}", sqlite3_errmsg(handle));
         return false;
     }
@@ -162,8 +171,7 @@ bool detail::configure_database(sqlite3* handle) {
 }
 
 bool detail::migrate_script(sqlite3* handle, std::string_view script, size_t version) {
-    assert(version >= 0);
-
+    assert(version < 1'000'000);
     if (!begin_transaction(handle)) {
         log_err("DB: cannot begin migration {}: {}", version, sqlite3_errmsg(handle));
         return false;
@@ -294,8 +302,8 @@ template<size_t software_version>
 bool Database::migrate_database(size_t current_version) {
     assert(handle != nullptr);
 
-    if (current_version < 0) {
-        log_err("DB: version is negative");
+    if (current_version > 1'000'000) {
+        log_err("DB: version is suspicously big");
         return false;
     }
 
@@ -360,9 +368,48 @@ int64_t Database::create_gardener(const std::string& name) {
     return sqlite3_last_insert_rowid(handle);
 }
 
+mv::GardenerResult Database::create_and_select_gardener(const std::string& name) {
+    bool transaction_started = false;
+    const auto fail = [this, &transaction_started](const char* stage) -> mv::GardenerResult {
+        auto message = std::format("DB: cannot create and select gardener ({}): {}",
+                                   stage, sqlite3_errmsg(handle));
+        log_err(message);
+        if (transaction_started && !sqlite3_get_autocommit(handle) && !execute(handle, "ROLLBACK;")) {
+            const auto rollback_error = std::format("; rollback failed: {}", sqlite3_errmsg(handle));
+            log_err(rollback_error);
+            message += rollback_error;
+        }
+        return std::unexpected(mv::MainverteError{
+            .code = mv::MainverteError::Code::Database, .message = std::move(message)});
+    };
+
+    if (!begin_transaction(handle)) {
+        return fail("begin");
+    }
+    transaction_started = true;
+    const auto id = create_gardener(name);
+    if (id <= 0) {
+        return fail("insert");
+    }
+    auto settings = read_settings();
+    if (!settings) {
+        return fail("read settings");
+    }
+    settings->current_gardener_id = id;
+    settings->current_collection_id = 0;
+    if (!write_settings(*settings)) {
+        return fail("select");
+    }
+    if (!end_transaction(handle)) {
+        return fail("commit");
+    }
+    return mv::Gardener{.id = id, .name = name};
+}
+
 std::optional<mv::Settings> Database::read_settings() {
     static constexpr const char* sql =
-        "SELECT current_gardener_id, current_collection_id FROM settings WHERE id = 1";
+        "SELECT (SELECT id FROM gardener WHERE id = current_gardener_id AND id > 0), "
+        "current_collection_id FROM settings WHERE id = 1";
     auto fail = [this]() -> std::optional<mv::Settings> {
         log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}", sqlite3_errmsg(handle));
         if (statement_read_settings) {
@@ -379,7 +426,7 @@ std::optional<mv::Settings> Database::read_settings() {
     }
 
     mv::Settings settings;
-    mv::id_t* fields[] = {&settings.current_gardener_id, &settings.current_collection_id};
+    std::array fields{&settings.current_gardener_id, &settings.current_collection_id};
     for (int column = 0; column < 2; ++column) {
         const int type = sqlite3_column_type(statement, column);
         if (type == SQLITE_NULL) {
@@ -414,7 +461,7 @@ bool Database::write_settings(const mv::Settings& settings) {
         return fail();
     }
     auto* statement = statement_write_settings.get();
-    const mv::id_t fields[] = {settings.current_gardener_id, settings.current_collection_id};
+    std::array fields{settings.current_gardener_id, settings.current_collection_id};
     for (int column = 0; column < 2; ++column) {
         const int rc = fields[column] == 0
             ? sqlite3_bind_null(statement, column + 1)

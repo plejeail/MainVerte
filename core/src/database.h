@@ -28,9 +28,9 @@
 #include <string>
 #include <string_view>
 #include <thread>
-#include <sys/types.h>
 
 #include "settings.h"
+#include "definitions.h"
 #include "move_only_function.h"
 
 struct sqlite3;
@@ -58,6 +58,7 @@ public:
     bool submit(Job job);
 
     int64_t create_gardener(const std::string& name);
+    mv::GardenerResult create_and_select_gardener(const std::string& name);
 
     // Use before start() on the owner thread, or on the worker after start().
     std::optional<mv::Settings> read_settings();

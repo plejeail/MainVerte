@@ -5,8 +5,10 @@
 
 namespace mv {
 struct Settings {
-    // Zero denotes no selection (SQL NULL).
-    int64_t current_gardener_id{0};
-    int64_t current_collection_id{0};
+    static constexpr int64_t Undefined = 0;
+
+    int64_t current_gardener_id{Undefined};
+    int64_t current_collection_id{Undefined};
+    std::string language;
 };
 }  // namespace mv

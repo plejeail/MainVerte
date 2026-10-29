@@ -2,7 +2,10 @@ find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
 
 include(cmake/translate.cmake)
 
-qt_standard_project_setup(REQUIRES 6.12)
+qt_standard_project_setup(REQUIRES 6.12
+    I18N_SOURCE_LANGUAGE en
+    I18N_TRANSLATED_LANGUAGES fr
+)
 
 file(GLOB_RECURSE APP_CPP_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
