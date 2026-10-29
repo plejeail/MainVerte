@@ -1,6 +1,6 @@
 find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
 
-include(cmake/translate.cmake)
+include("${PROJECT_SOURCE_DIR}/cmake/translate.cmake")
 
 qt_standard_project_setup(REQUIRES 6.12
     I18N_SOURCE_LANGUAGE en
@@ -54,6 +54,7 @@ qt_add_qml_module(appMainVerte
 
 generate_translations(
     TARGET appMainVerte
+    DESTINATION generated_translations.hpp
     DICTIONARIES
         translations/MainVerte_en.dict
         translations/MainVerte_fr.dict

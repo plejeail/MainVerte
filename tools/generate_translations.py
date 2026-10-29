@@ -60,7 +60,7 @@ def cpp_string(text):
     return f'QStringLiteral("{escaped}")'
 
 
-def generate(paths, output_dir):
+def generate(paths, output_dir, output_name="generated_translations.hpp"):
     dictionaries = []
     languages = set()
     reference = None
@@ -131,8 +131,8 @@ inline const std::array languages{
     dictionary += "};\n\n} // namespace mv::i18n\n"
 
     # Validate and render every dictionary before touching any output.
-    output_dir.mkdir(parents=True, exist_ok=True)
-    destination = output_dir / "generated_translations.hpp"
+    destination = output_dir / output_name
+    destination.parent.mkdir(parents=True, exist_ok=True)
     data = dictionary.encode("utf-8")
     if not destination.exists() or destination.read_bytes() != data:
         temporary = destination.with_suffix(".hpp.tmp")
@@ -143,11 +143,13 @@ inline const std::array languages{
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--output-name", default="generated_translations.hpp",
+                        help="header filename relative to the output directory")
     parser.add_argument("dictionaries", type=Path, nargs="+",
                         help="reference dictionary first")
     args = parser.parse_args()
     try:
-        generate(args.dictionaries, args.output_dir)
+        generate(args.dictionaries, args.output_dir, args.output_name)
     except (DictionaryError, OSError, UnicodeError) as error:
         print(f"Translation generation failed: {error}", file=sys.stderr)
         return 1

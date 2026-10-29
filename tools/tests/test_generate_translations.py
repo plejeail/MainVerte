@@ -134,6 +134,17 @@ class GeneratorTests(unittest.TestCase):
         self.assertIn(f"{en}:2: duplicate ID", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
 
+    def test_cli_custom_header_destination(self):
+        en = self.dictionary("A,a\n")
+        result = subprocess.run(
+            [sys.executable, "-B", str(SCRIPT), "--output-dir", str(self.output),
+             "--output-name", "custom/translations.hpp", str(en)],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("QStringLiteral", (self.output / "custom/translations.hpp").read_text())
+        self.assertFalse((self.output / "generated_translations.hpp").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

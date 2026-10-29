@@ -1,4 +1,4 @@
-include(cmake/cmake_generate_sql.cmake)
+include("${PROJECT_SOURCE_DIR}/cmake/cmake_generate_sql.cmake")
 
 file(GLOB_RECURSE CORE_CPP_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"

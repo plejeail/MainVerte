@@ -1,8 +1,14 @@
+# TARGET: existing target that consumes the generated header. Generation runs
+# before this target, and its private include paths include the output directory.
+# DESTINATION: header filename, relative to CMAKE_CURRENT_BINARY_DIR/generated.
+# DICTIONARIES: ordered list of MainVerte_<language>.dict files, relative to
+# CMAKE_CURRENT_SOURCE_DIR (absolute paths also work). The first dictionary
+# defines the text IDs and their order; all others must contain the same IDs.
 function(generate_translations)
-    cmake_parse_arguments(PARSE_ARGV 0 arg "" "TARGET" "DICTIONARIES")
-    if(NOT arg_TARGET OR NOT TARGET "${arg_TARGET}" OR NOT arg_DICTIONARIES
+    cmake_parse_arguments(PARSE_ARGV 0 arg "" "TARGET;DESTINATION" "DICTIONARIES")
+    if(NOT arg_TARGET OR NOT TARGET "${arg_TARGET}" OR NOT arg_DICTIONARIES OR NOT arg_DESTINATION
        OR arg_UNPARSED_ARGUMENTS OR arg_KEYWORDS_MISSING_VALUES)
-        message(FATAL_ERROR "generate_translations requires TARGET and ordered DICTIONARIES")
+        message(FATAL_ERROR "generate_translations requires TARGET, DESTINATION and ordered DICTIONARIES")
     endif()
 
     # The interpreter runs on the build host, also when targeting Android.
@@ -16,13 +22,13 @@ function(generate_translations)
     endforeach()
 
     set(output_dir "${CMAKE_CURRENT_BINARY_DIR}/generated")
-    set(headers "${output_dir}/generated_translations.hpp")
+    set(headers "${output_dir}/${arg_DESTINATION}")
     set(stamp "${output_dir}/translations.stamp")
     add_custom_command(
         OUTPUT "${stamp}"
         BYPRODUCTS ${headers}
         COMMAND "${Python3_EXECUTABLE}" "${generator}"
-            --output-dir "${output_dir}" ${dictionaries}
+            --output-dir "${output_dir}" --output-name "${arg_DESTINATION}" ${dictionaries}
         COMMAND "${CMAKE_COMMAND}" -E touch "${stamp}"
         DEPENDS "${generator}" ${dictionaries}
         COMMENT "Generating embedded translations for ${arg_TARGET}"
