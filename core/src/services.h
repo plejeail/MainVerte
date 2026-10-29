@@ -13,7 +13,6 @@
 class  Database;
 
 
-using Settings = mv::Settings;
 // Services are initialized and destroyed exclusively in services.cpp.
 // The consummer of core controls their lifetime through mv::Services,
 // declared in mainverte_core.h.
@@ -22,6 +21,6 @@ using Settings = mv::Settings;
 //
 // Internal consumers borrow these services; they must not reset or move them.
 namespace service {
-Settings& settings();
+mv::Settings& settings();
 Database& database();
 }  // service

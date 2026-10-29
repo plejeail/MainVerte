@@ -1,3 +1,15 @@
 App_Title,MainVerte
 Collection_Title,Collection
 Parameters_Title,Parameters
+Gardener_Slogan,Let’s grow your space
+Gardener_Profile,Let’s get to know each other. What would you like us to call you?
+Gardener_NameLabel,Name of the gardener
+Gardener_NamePlaceholder,Your name or nickname
+Gardener_Privacy,Your data stay on your device.
+Gardener_Busy,Creating your garden…
+Gardener_Create,Create your space
+Gardener_NameRequired,Enter a name to continue.
+Gardener_NameTooLong,The name must contain at most 30 characters.
+Gardener_ServiceUnavailable,The save service is unavailable.
+Gardener_CreateFailed,Unable to create this gardener. Please retry.
+Gardener_SaveFailed,Unable to save your selection. Please retry.

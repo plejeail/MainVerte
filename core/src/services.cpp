@@ -19,14 +19,14 @@
 
 namespace {
 struct ServicesImpl {
-    Settings settings;
+    mv::Settings settings;
     Database database;
 };
 
 std::unique_ptr<ServicesImpl> services_instance;  // NOLINT
 }  // namespace
 
-Settings& service::settings() {
+mv::Settings& service::settings() {
     assert(services_instance != nullptr);
     return services_instance->settings;
 }
@@ -68,29 +68,63 @@ mv::Services::~Services() {
     services_instance.reset();
 }
 
-mv::Settings mv::Services::settings() const {
+mv::Settings mv::settings() {
     assert(services_instance != nullptr);
     return services_instance->settings;
 }
 
-bool mv::Services::save_settings(const Settings& settings) {
+bool mv::save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callback) {
     assert(services_instance != nullptr);
-    auto& database = services_instance->database;
-    return database.submit([&database, settings](sqlite3*) {
-        if (database.write_settings(settings)) {
-            mv::platform::dispatch_callback([settings] {
-                if (services_instance) {
-                    services_instance->settings = settings;
-                }
-            });
-        }
+    auto completion = std::make_shared<MoveOnlyFunction<void(bool)>>(std::move(callback));
+    const bool accepted = service::database().submit([settings, completion](sqlite3*) {
+        const bool saved = service::database().write_settings(settings);
+        mv::platform::dispatch_callback([settings, saved, completion] {
+            if (saved && services_instance) {
+                services_instance->settings = settings;
+            }
+            if (*completion) {
+                (*completion)(saved);
+            }
+        });
     });
+    if (!accepted && *completion) {
+        mv::platform::dispatch_callback([completion] { (*completion)(false); });
+    }
+    return accepted;
+}
+
+bool mv::create_and_select_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback) {
+    assert(services_instance != nullptr);
+    assert(callback);
+    if (name.empty()) {
+        log_wrn("Gardener not created: empty gardener name");
+        return false;
+    }
+
+    auto completion = std::make_shared<MoveOnlyFunction<void(GardenerResult)>>(std::move(callback));
+    const bool accepted = service::database().submit(
+        [name = std::move(name), completion](sqlite3*) {
+            auto result = service::database().create_and_select_gardener(name);
+            mv::platform::dispatch_callback([result = std::move(result), completion]() mutable {
+                if (result && services_instance) {
+                    services_instance->settings.current_gardener_id = result->id;
+                    services_instance->settings.current_collection_id = 0;
+                }
+                (*completion)(std::move(result));
+            });
+        });
+    if (!accepted) {
+        dispatch_result(std::move(*completion), GardenerResult(std::unexpected(
+            MainverteError{.code = MainverteError::Code::NotRunning, .message = "Database is not running"})));
+    }
+    return accepted;
 }
 
 bool mv::create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback) {
     assert(services_instance != nullptr);
     assert(callback);
-    if (name.size() == 0 || name.size() > 30) {
+    if (name.size() == 0) {
+        log_wrn("Gardener not created: empty gardener name");
         return false;
     }
 
@@ -100,10 +134,10 @@ bool mv::create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)
     const bool accepted = service::database().submit(
     [name=std::move(name), completion](sqlite3* database) mutable {
         mv::id_t id = service::database().create_gardener(name);
-        if (id >= 0) {
+        if (id > 0) {
             dispatch_result(std::move(*completion), GardenerResult(Gardener{.id = id, .name = std::move(name)}));
         } else {
-            auto message = std::format("create gardener failed: {}", sqlite3_errmsg(database));
+            auto message = std::format("Gardener not created: sql error {}", sqlite3_errmsg(database));
             log_err(message);
             dispatch_result(std::move(*completion),
                 GardenerResult(std::unexpected(
