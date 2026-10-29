@@ -1,7 +1,17 @@
 #include "services.h"
+
+#include <cassert>
+#include <expected>
+#include <format>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+
 #include "mainverte_core.h"
 
 #include "database.h"
+#include "definitions.h"
 #include "move_only_function.h"
 #include "settings.h"
 #include "tools.h"
@@ -29,7 +39,6 @@ Database& service::database() {
 }
 
 bool mv::Services::initialize(std::string_view database_path) {
-    static bool initialized = false;
     assert(!initialized);
     if (initialized) {
         return true;
@@ -55,21 +64,25 @@ mv::Services::~Services() {
     services_instance.reset();
 }
 
-void mv::create_gardener(std::string name, MoveOnlyFunction<void(CreateGardenerResult)> callback) {
+bool mv::create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback) {
     assert(callback);
+    if (name.size() == 0 || name.size() > 30) {
+        return false;
+    }
+
     // Retain the callback across submit(): rejected jobs destroy their captures.
     // Only the worker (accepted) or caller (rejected) consumes it.
-    auto completion = std::make_shared<MoveOnlyFunction<void(CreateGardenerResult)>>(std::move(callback));
+    auto completion = std::make_shared<MoveOnlyFunction<void(GardenerResult)>>(std::move(callback));
     const bool accepted = service::database().submit(
     [name=std::move(name), completion](sqlite3* database) mutable {
         mv::id_t id = service::database().create_gardener(name);
         if (id >= 0) {
-            dispatch_result(std::move(*completion), CreateGardenerResult(Gardener{.id = id, .name = std::move(name)}));
+            dispatch_result(std::move(*completion), GardenerResult(Gardener{.id = id, .name = std::move(name)}));
         } else {
             auto message = std::format("create gardener failed: {}", sqlite3_errmsg(database));
             log_err(message);
             dispatch_result(std::move(*completion),
-                CreateGardenerResult(std::unexpected(
+                GardenerResult(std::unexpected(
                     MainverteError{
                         .code = MainverteError::Code::Database,
                         .message = std::move(message)
@@ -80,7 +93,9 @@ void mv::create_gardener(std::string name, MoveOnlyFunction<void(CreateGardenerR
     });
 
     if (!accepted) {
-        dispatch_result(std::move(*completion), CreateGardenerResult(std::unexpected(
+        dispatch_result(std::move(*completion), GardenerResult(std::unexpected(
             MainverteError{.code = MainverteError::Code::NotRunning, .message = "Database is not running"})));
     }
+
+    return accepted;
 }

@@ -1,7 +1,17 @@
+#include <chrono>
+#include <deque>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <thread>
+#include <utility>
+
 #include <future>
 #include <sqlite3.h>
 
 #include "database.h"
+#include "definitions.h"
+#include "move_only_function.h"
 #include "doctest.h"
 #include "mainverte_core.h"
 #include "services.h"
@@ -40,16 +50,16 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     mv::Services services;
     REQUIRE(services.initialize(":memory:"));
     const auto caller = std::this_thread::get_id();
-    std::optional<mv::CreateGardenerResult> received;
+    std::optional<mv::GardenerResult> received;
     int calls = 0;
-    auto callback = [&](mv::CreateGardenerResult result) {
+    auto callback = [&](mv::GardenerResult result) {
         CHECK(std::this_thread::get_id() == caller);
         ++calls;
         received = std::move(result);
     };
 
     // Quotes and SQL-looking text must be stored as values, not interpreted.
-    const std::string name = "Pierre'); DROP TABLE gardener; --";
+    const std::string name = "MV'); DROP TABLE gardener; --";
     mv::create_gardener(name, callback);
     REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
     CHECK(calls == 0);
@@ -65,7 +75,7 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     REQUIRE(execute_on_worker(
         "CREATE TRIGGER check_previous BEFORE INSERT ON gardener BEGIN "
         "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM gardener WHERE id = 1 "
-        "AND display_name = 'Pierre''); DROP TABLE gardener; --' "
+        "AND display_name = 'MV''); DROP TABLE gardener; --' "
         "AND created_at > 0) THEN RAISE(ABORT, 'missing previous gardener') END; END;") == SQLITE_OK);
     mv::create_gardener("Second", callback);
     REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
@@ -91,6 +101,7 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
     deliver_completions();
     REQUIRE_FALSE(received->has_value());
-    CHECK(received->error().message.find("prepare") != std::string::npos);
+    CHECK(received->error().code == mv::MainverteError::Code::Database);
+    CHECK(received->error().message.find("no such table") != std::string::npos);
     CHECK(calls == 4);
 }

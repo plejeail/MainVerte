@@ -33,14 +33,14 @@ class GeneratorTests(unittest.TestCase):
         header = (self.output / "generated_translations.hpp").read_text()
         self.assertEqual([path.name for path in self.output.iterdir()],
                          ["generated_translations.hpp"])
-        self.assertIn("enum class TextId : int", header)
+        self.assertIn("enum class TextId : int32_t {", header)
         self.assertIn("Q_NAMESPACE", header)
         self.assertIn("QML_NAMED_ELEMENT(TextId)", header)
         self.assertIn("Q_ENUM_NS(TextId)", header)
         self.assertLess(header.index("App_Title"), header.index("Collection_Title"))
         self.assertLess(header.index("enum class TextId"), header.index("strings_en"))
-        self.assertIn('Language{"en", strings_en}', header)
-        self.assertIn('Language{"fr", strings_fr}', header)
+        self.assertIn('Language{.code="en", .texts=strings_en}', header)
+        self.assertIn('Language{.code="fr", .texts=strings_fr}', header)
         self.assertIn("inline const std::array<QString,", header)
         self.assertIn("std::span<const QString> texts;", header)
         french = header[header.index("strings_fr"):]

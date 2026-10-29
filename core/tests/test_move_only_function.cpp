@@ -1,3 +1,7 @@
+#include <memory>
+#include <type_traits>
+#include <utility>
+
 #include "move_only_function.h"
 #include "doctest.h"
 

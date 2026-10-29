@@ -1,3 +1,9 @@
+#include <array>
+#include <chrono>
+#include <thread>
+#include <utility>
+#include <vector>
+
 #include <future>
 #include <sqlite3.h>
 

@@ -1,3 +1,12 @@
+#include <chrono>
+#include <cstring>
+#include <filesystem>
+#include <format>
+#include <initializer_list>
+#include <memory>
+#include <string>
+#include <system_error>
+
 #include <sqlite3.h>
 #include "doctest.h"
 

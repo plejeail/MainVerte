@@ -5,7 +5,15 @@
 // ------------------------------------------------------------- mainverte/core
 #pragma once
 
+#include <cassert>
+#include <chrono>
+#include <format>
+#include <ratio>
+#include <string_view>
+#include <utility>
+
 #include "mainverte_core.h"
+#include "move_only_function.h"
 
 
 // Request forced inlining where supported; the compiler has the final say.

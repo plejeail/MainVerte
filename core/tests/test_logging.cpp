@@ -1,4 +1,7 @@
+#include <string_view>
+
 #include "tools.h"
+#include "mainverte_core.h"
 #include "doctest.h"
 
 #include <string>

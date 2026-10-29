@@ -94,6 +94,7 @@ def generate(paths, output_dir):
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <cstddef>
 #include <span>
 #include <string_view>
@@ -106,14 +107,14 @@ namespace mv::i18n {
 Q_NAMESPACE
 QML_NAMED_ELEMENT(TextId)
 
-enum class TextId : int {
+enum class TextId : int32_t {  // NOLINT(performance-enum-size)
 """
     dictionary += "".join(f"    {key},\n" for key in reference)
     dictionary += "    Count\n};\nQ_ENUM_NS(TextId)\n\n"
     for language, entries in dictionaries:
         dictionary += ("inline const std::array<QString, "
                        "static_cast<std::size_t>(TextId::Count)> "
-                       f"strings_{language}{{\n")
+                       f"strings_{language}{{    // NOLINT(bugprone-throwing-static-initialization)\n")
         dictionary += "".join(f"    {cpp_string(entries[key])},\n" for key in reference)
         dictionary += "};\n\n"
     dictionary += """struct Language {
@@ -124,7 +125,7 @@ enum class TextId : int {
 inline const std::array languages{
 """
     dictionary += "".join(
-        f'    Language{{"{language}", strings_{language}}},\n'
+        f'    Language{{.code="{language}", .texts=strings_{language}}},\n'
         for language, _ in dictionaries
     )
     dictionary += "};\n\n} // namespace mv::i18n\n"

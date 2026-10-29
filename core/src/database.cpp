@@ -1,12 +1,27 @@
+#include "database.h"
+
+#include <cassert>
+#include <cstdint>
+#include <cstring>
+#include <filesystem>
+#include <format>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <thread>
+#include <utility>
+
 #include <sqlite3.h>
 
-#include "database.h"
 #include "sql_scripts.hpp"
 #include "tools.h"
 
 
 namespace {
-static constexpr ssize_t DATABASE_VERSION = mv::sql::scripts.size();
+static constexpr size_t DATABASE_VERSION = mv::sql::scripts.size();
 static const auto TRANSIENT = SQLITE_TRANSIENT;  // NOLINT(performance-no-int-to-ptr)
 
 const char* to_string(Database::State state) {
@@ -32,7 +47,6 @@ MV_INLINE bool execute(sqlite3* handle, const char* sql) {
     assert(sql != nullptr);
 
     auto res = sqlite3_exec(handle, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
-    assert(res);
     return res;
 }
 
@@ -44,7 +58,7 @@ MV_INLINE bool end_transaction(sqlite3* handle) {
     return execute(handle, "COMMIT;");
 }
 
-std::optional<ssize_t> get_database_version(sqlite3* handle) {
+std::optional<size_t> get_database_version(sqlite3* handle) {
     sqlite3_stmt* stmt = nullptr;
 
     int rc = sqlite3_prepare_v2(handle, "PRAGMA user_version;", -1, &stmt, nullptr);
@@ -69,10 +83,10 @@ std::optional<ssize_t> get_database_version(sqlite3* handle) {
     rc = sqlite3_finalize(stmt);
     assert(rc == SQLITE_OK);
 
-    return {static_cast<ssize_t>(version)};
+    return {static_cast<size_t>(version)};
 }
 
-MV_INLINE bool set_database_version(sqlite3* handle, ssize_t version) {
+MV_INLINE bool set_database_version(sqlite3* handle, size_t version) {
     const std::string update_version = std::format("PRAGMA user_version = {};", version);
     return execute(handle, update_version.c_str());
 }
@@ -111,7 +125,7 @@ MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_v
 
 bool prepare_statement(sqlite3* handle, Database::statement_ptr& ptr, const char* query) {
     if (ptr != nullptr) {
-        return sqlite3_reset(ptr.get()) == SQLITE_OK;
+        return true;
     }
 
     sqlite3_stmt* statement;
@@ -146,7 +160,7 @@ bool detail::configure_database(sqlite3* handle) {
         && verify_pragma(handle, "PRAGMA busy_timeout;", "3000");
 }
 
-bool detail::migrate_script(sqlite3* handle, std::string_view script, ssize_t version) {
+bool detail::migrate_script(sqlite3* handle, std::string_view script, size_t version) {
     assert(version >= 0);
 
     if (!begin_transaction(handle)) {
@@ -273,8 +287,8 @@ bool Database::initialize(const std::string& path) {
     return true;
 }
 
-template<ssize_t software_version>
-bool Database::migrate_database(ssize_t current_version) {
+template<size_t software_version>
+bool Database::migrate_database(size_t current_version) {
     assert(handle != nullptr);
 
     if (current_version < 0) {
@@ -288,7 +302,7 @@ bool Database::migrate_database(ssize_t current_version) {
     }
 
     bool success = true;
-    for (ssize_t v = current_version; v < software_version; ++v) {
+    for (size_t v = current_version; v < software_version; ++v) {
 
         if (!detail::migrate_script(handle, mv::sql::scripts[v], v + 1)) {
             return false;
@@ -328,13 +342,15 @@ int64_t Database::create_gardener(const std::string& name) {
 
     auto* statement = statement_create_gardener.get();
     auto str_size = static_cast<sqlite3_uint64>(name.size());
-    int rc = sqlite3_bind_text64(statement, 1, name.data(), str_size, TRANSIENT, SQLITE_UTF8);
-    if (rc != SQLITE_OK) {
+    int bind_rc = sqlite3_bind_text64(statement, 1, name.data(), str_size, TRANSIENT, SQLITE_UTF8);
+    if (bind_rc != SQLITE_OK) {
         return -1;
     }
 
-    rc = sqlite3_step(statement);
-    if (rc != SQLITE_DONE) {
+    int step_rc  = sqlite3_step(statement);
+    int reset_rc = sqlite3_reset(statement);
+
+    if (step_rc != SQLITE_DONE || reset_rc != SQLITE_OK) {
         return -1;
     }
 

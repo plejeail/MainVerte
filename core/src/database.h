@@ -19,6 +19,16 @@
 // ------------------------------------------------------------- mainverte/core
 #pragma once
 
+#include <condition_variable>
+#include <cstdint>
+#include <deque>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <string_view>
+#include <thread>
+#include <sys/types.h>
+
 #include "move_only_function.h"
 
 struct sqlite3;
@@ -50,7 +60,7 @@ public:
 private:
     void thread_loop();
 
-    template <ssize_t software_version> bool migrate_database(ssize_t current_version);
+    template <size_t software_version> bool migrate_database(size_t current_version);
 
     State                   state = State::Uninitialized;
     std::mutex              mutex;
@@ -63,5 +73,5 @@ private:
 
 namespace detail {
 bool configure_database(sqlite3* handle);
-bool migrate_script(sqlite3* handle, std::string_view script, ssize_t version);
+bool migrate_script(sqlite3* handle, std::string_view script, size_t version);
 }

@@ -8,11 +8,11 @@
 #pragma once
 
 #include <cstdint>
-#include <expected>
 #include <string>
 #include <string_view>
 
 #include "move_only_function.h"
+#include "definitions.h"
 
 
 namespace mv {
@@ -76,26 +76,14 @@ public:
     /// Returns false on failure; do not use Core services in that case.
     /// Destruction still releases any partially initialized services.
     bool initialize(std::string_view database_path);
+
+private:
+    bool initialized{false};
 };
-
-/// internal object id type
-using id_t = int64_t;
-
-struct MainverteError {
-    enum class Code : uint8_t { NotRunning, Database };
-    Code code;
-    std::string message;
-};
-
-struct Gardener {
-    id_t id;
-    std::string name;
-};
-
-using CreateGardenerResult = std::expected<Gardener, MainverteError>;
 
 /// Inserts a gardener and delivers its ID and name through platform::dispatch_callback.
 /// Requires initialized Services and a nonempty callback. Errors, including refused
 /// submissions, are delivered through the same dispatcher. The name is owned by Core.
-void create_gardener(std::string name, MoveOnlyFunction<void(CreateGardenerResult)> callback);
+bool create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback);
+
 }  // namespace mv
