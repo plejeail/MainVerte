@@ -52,9 +52,13 @@ std::pair<int, std::string> scalar(sqlite3* handle, const char* query) {
     sqlite3_stmt* raw = nullptr;
     int status = sqlite3_prepare_v2(handle, query, -1, &raw, nullptr);
     std::unique_ptr<sqlite3_stmt, decltype(&sqlite3_finalize)> statement(raw, &sqlite3_finalize);
-    if (status != SQLITE_OK) return {status, {}};
+    if (status != SQLITE_OK) {
+        return {status, {}};
+    }
     status = sqlite3_step(raw);
-    if (status != SQLITE_ROW) return {status, {}};
+    if (status != SQLITE_ROW) {
+        return {status, {}};
+    }
     const auto* text = sqlite3_column_text(raw, 0);
     std::string value = text ? reinterpret_cast<const char*>(text) : "";
     status = sqlite3_finalize(statement.release());
@@ -119,6 +123,93 @@ TEST_CASE("An opening failure permits a successful retry on the same database ob
     const auto result = run_job(database, [](sqlite3* handle) { return scalar(handle, "SELECT 42;"); });
     REQUIRE(result.first == SQLITE_OK);
     CHECK(result.second == "42");
+}
+
+TEST_CASE("Settings persist every field across database reopening and map zero to NULL") {
+    DatabaseFile file;
+    {
+        Database database;
+        REQUIRE(database.initialize(file.filename));
+        auto defaults = database.read_settings();
+        REQUIRE(defaults.has_value());
+        CHECK(defaults->current_gardener_id == 0);
+        CHECK(defaults->current_collection_id == 0);
+        database.start();
+        REQUIRE(run_job(database, [](sqlite3* handle) {
+            return sqlite3_exec(handle,
+                "INSERT INTO gardener VALUES(42, 'Gardener', 123);"
+                "INSERT INTO collection VALUES(73, 42, 'Collection', 123, 123);",
+                nullptr, nullptr, nullptr);
+        }) == SQLITE_OK);
+        REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73}); }));
+        REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73}); }));
+    }
+    {
+        Database database;
+        REQUIRE(database.initialize(file.filename));
+        const auto restored = database.read_settings();
+        REQUIRE(restored.has_value());
+        CHECK(restored->current_gardener_id == 42);
+        CHECK(restored->current_collection_id == 73);
+        REQUIRE(database.write_settings({0, 73}));
+        const auto partial = database.read_settings();
+        REQUIRE(partial.has_value());
+        CHECK(partial->current_gardener_id == 0);
+        CHECK(partial->current_collection_id == 73);
+        REQUIRE(database.write_settings({}));
+        database.start();
+        const auto cleared = run_job(database, [](sqlite3* handle) {
+            return scalar(handle, "SELECT current_gardener_id IS NULL AND current_collection_id IS NULL FROM settings;");
+        });
+        REQUIRE(cleared.first == SQLITE_OK);
+        CHECK(cleared.second == "1");
+    }
+}
+
+TEST_CASE("Settings errors preserve values and cached statements recover") {
+    Database database;
+    REQUIRE(database.initialize(":memory:"));
+    database.start();
+    REQUIRE(run_job(database, [](sqlite3* handle) {
+        return sqlite3_exec(handle,
+            "INSERT INTO gardener VALUES(42, 'Gardener', 123);"
+            "INSERT INTO collection VALUES(73, 42, 'Collection', 123, 123);",
+            nullptr, nullptr, nullptr);
+    }) == SQLITE_OK);
+    REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73}); }));
+    CHECK_FALSE(run_job(database, [&database](sqlite3*) { return database.write_settings({0, 999}); }));
+    auto retained = run_job(database, [&database](sqlite3*) { return database.read_settings(); });
+    REQUIRE(retained.has_value());
+    CHECK(retained->current_gardener_id == 42);
+    CHECK(retained->current_collection_id == 73);
+    CHECK(run_job(database, [](sqlite3* handle) {
+        for (auto* statement = sqlite3_next_stmt(handle, nullptr); statement;
+             statement = sqlite3_next_stmt(handle, statement)) {
+            if (sqlite3_stmt_busy(statement)) {
+                return false;
+            }
+        }
+        return true;
+    }));
+    REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({}); }));
+    REQUIRE(run_job(database, [](sqlite3* handle) {
+        return sqlite3_exec(handle, "DELETE FROM settings;", nullptr, nullptr, nullptr);
+    }) == SQLITE_OK);
+    CHECK_FALSE(run_job(database, [&database](sqlite3*) { return database.read_settings(); }).has_value());
+    CHECK_FALSE(run_job(database, [&database](sqlite3*) { return database.write_settings({}); }));
+    REQUIRE(run_job(database, [](sqlite3* handle) {
+        return sqlite3_exec(handle, "INSERT INTO settings(id) VALUES(1);", nullptr, nullptr, nullptr);
+    }) == SQLITE_OK);
+    REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73}); }));
+    retained = run_job(database, [&database](sqlite3*) { return database.read_settings(); });
+    REQUIRE(retained.has_value());
+    CHECK(retained->current_gardener_id == 42);
+    CHECK(retained->current_collection_id == 73);
+    REQUIRE(run_job(database, [](sqlite3* handle) {
+        return sqlite3_exec(handle, "DROP TABLE settings;", nullptr, nullptr, nullptr);
+    }) == SQLITE_OK);
+    CHECK_FALSE(run_job(database, [&database](sqlite3*) { return database.read_settings(); }).has_value());
+    CHECK_FALSE(run_job(database, [&database](sqlite3*) { return database.write_settings({}); }));
 }
 
 TEST_CASE("Unsupported schema versions are rejected without modifying existing data") {

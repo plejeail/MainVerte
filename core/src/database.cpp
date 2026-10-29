@@ -15,6 +15,7 @@
 #include <utility>
 
 #include <sqlite3.h>
+#include <limits>
 
 #include "sql_scripts.hpp"
 #include "tools.h"
@@ -183,6 +184,8 @@ bool detail::migrate_script(sqlite3* handle, std::string_view script, size_t ver
 
 Database::Database()
 : statement_create_gardener(nullptr, sqlite3_finalize)
+, statement_read_settings(nullptr, sqlite3_finalize)
+, statement_write_settings(nullptr, sqlite3_finalize)
 {}
 
 Database::~Database() {
@@ -355,4 +358,77 @@ int64_t Database::create_gardener(const std::string& name) {
     }
 
     return sqlite3_last_insert_rowid(handle);
+}
+
+std::optional<mv::Settings> Database::read_settings() {
+    static constexpr const char* sql =
+        "SELECT current_gardener_id, current_collection_id FROM settings WHERE id = 1";
+    auto fail = [this]() -> std::optional<mv::Settings> {
+        log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}", sqlite3_errmsg(handle));
+        if (statement_read_settings) {
+            sqlite3_reset(statement_read_settings.get());
+        }
+        return std::nullopt;
+    };
+    if (!prepare_statement(handle, statement_read_settings, sql)) {
+        return fail();
+    }
+    auto* statement = statement_read_settings.get();
+    if (sqlite3_step(statement) != SQLITE_ROW) {
+        return fail();
+    }
+
+    mv::Settings settings;
+    mv::id_t* fields[] = {&settings.current_gardener_id, &settings.current_collection_id};
+    for (int column = 0; column < 2; ++column) {
+        const int type = sqlite3_column_type(statement, column);
+        if (type == SQLITE_NULL) {
+            continue;
+        }
+        if (type != SQLITE_INTEGER) {
+            return fail();
+        }
+        const auto value = sqlite3_column_int64(statement, column);
+        *fields[column] = static_cast<mv::id_t>(value);
+    }
+    if (sqlite3_step(statement) != SQLITE_DONE) {
+        return fail();
+    }
+    if (sqlite3_reset(statement) != SQLITE_OK) {
+        return fail();
+    }
+    return settings;
+}
+
+bool Database::write_settings(const mv::Settings& settings) {
+    static constexpr const char* sql =
+        "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2 WHERE id = 1";
+    auto fail = [this] {
+        log_err("DB: cannot write settings (missing row or SQLite error): {}", sqlite3_errmsg(handle));
+        if (statement_write_settings) {
+            sqlite3_reset(statement_write_settings.get());
+        }
+        return false;
+    };
+    if (!prepare_statement(handle, statement_write_settings, sql)) {
+        return fail();
+    }
+    auto* statement = statement_write_settings.get();
+    const mv::id_t fields[] = {settings.current_gardener_id, settings.current_collection_id};
+    for (int column = 0; column < 2; ++column) {
+        const int rc = fields[column] == 0
+            ? sqlite3_bind_null(statement, column + 1)
+            : sqlite3_bind_int64(statement, column + 1, fields[column]);
+        if (rc != SQLITE_OK) {
+            return fail();
+        }
+    }
+    // A single UPDATE keeps both fields atomic, including on constraint failures.
+    if (sqlite3_step(statement) != SQLITE_DONE || sqlite3_changes(handle) != 1) {
+        return fail();
+    }
+    if (sqlite3_reset(statement) != SQLITE_OK) {
+        return fail();
+    }
+    return true;
 }

@@ -24,11 +24,13 @@
 #include <deque>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <thread>
 #include <sys/types.h>
 
+#include "settings.h"
 #include "move_only_function.h"
 
 struct sqlite3;
@@ -57,6 +59,10 @@ public:
 
     int64_t create_gardener(const std::string& name);
 
+    // Use before start() on the owner thread, or on the worker after start().
+    std::optional<mv::Settings> read_settings();
+    bool write_settings(const mv::Settings& settings);
+
 private:
     void thread_loop();
 
@@ -69,6 +75,8 @@ private:
     std::deque<Job>         jobs;
     std::thread             thread;
     statement_ptr           statement_create_gardener;
+    statement_ptr           statement_read_settings;
+    statement_ptr           statement_write_settings;
 };
 
 namespace detail {
