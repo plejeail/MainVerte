@@ -15,4 +15,7 @@ Gardener_CreateFailed,Impossible de créer ce jardinier. Réessaie.
 Gardener_SaveFailed,Impossible de sauvegarder la sélection. Réessaie.
 Gardener_LanguageLabel,Langue
 Settings_LanguageLabel,Langue
-Settings_LanguageSaveFailed,Impossible de sauvegarder la langue. Sélectionnez-la à nouveau pour réessayer.
+Settings_SaveFailed,Impossible de sauvegarder les paramètres. Réessayez.
+Appearance_Title,Apparence
+Theme_Light,Clair
+Theme_Dark,Sombre

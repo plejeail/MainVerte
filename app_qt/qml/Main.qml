@@ -1,12 +1,13 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import MainVerteStyle as MV
 
 ApplicationWindow {
     id: window
 
     property int currentSection: 0
-    readonly property bool desktopNavigation: Qt.platform.os !== "android"
+    readonly property bool desktopNavigation: width >= MV.Tokens.compactBreakpoint
 
     function showSection(index: int) {
         if (currentSection === index)
@@ -14,6 +15,11 @@ ApplicationWindow {
         currentSection = index;
         pages.replace(index === 0 ? collectionPage : settingsPage);
     }
+
+    width: MV.Tokens.touch ? Screen.width : 960
+    height: MV.Tokens.touch ? Screen.height : 640
+    minimumWidth: 320
+    minimumHeight: 480
 
     title: Ts.get(TextId.App_Title)
     visible: false
@@ -28,20 +34,6 @@ ApplicationWindow {
         } else {
             window.visible = true;
         }
-    }
-
-    Binding {
-        property: "width"
-        target: window
-        value: 640
-        when: window.desktopNavigation
-    }
-
-    Binding {
-        property: "height"
-        target: window
-        value: 480
-        when: window.desktopNavigation
     }
 
     footer: TabBar {
@@ -66,8 +58,8 @@ ApplicationWindow {
 
             Label {
                 Layout.fillWidth: true
-                Layout.leftMargin: 12
-                font.bold: true
+                Layout.leftMargin: MV.Tokens.space2
+                font: MV.Tokens.titleFont
                 text: (pages.currentItem as Page)?.title ?? Ts.get(TextId.App_Title)
             }
         }
@@ -79,7 +71,7 @@ ApplicationWindow {
 
         Frame {
             Layout.fillHeight: true
-            Layout.preferredWidth: 180
+            Layout.preferredWidth: MV.Tokens.controlHeight * 5
             visible: window.desktopNavigation
 
             ColumnLayout {

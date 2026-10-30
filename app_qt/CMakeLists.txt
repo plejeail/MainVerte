@@ -2,10 +2,11 @@ find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
 
 include("${PROJECT_SOURCE_DIR}/cmake/translate.cmake")
 
-qt_standard_project_setup(REQUIRES 6.12
-    I18N_SOURCE_LANGUAGE en
-    I18N_TRANSLATED_LANGUAGES fr
-)
+qt_standard_project_setup(REQUIRES 6.12)
+set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml")
+
+add_subdirectory(style)
+add_subdirectory(showcase)
 
 file(GLOB_RECURSE APP_CPP_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
@@ -74,10 +75,16 @@ set_target_properties(appMainVerte PROPERTIES
 target_link_libraries(appMainVerte
     PRIVATE Qt6::Quick
     Qt6::QuickControls2
+    mainverte_styleplugin
+    mainverte_showcaseplugin
 
     mainverte_core
     project_warnings
 )
+
+if(BUILD_TESTING)
+    add_subdirectory(tests)
+endif()
 
 install(TARGETS appMainVerte
     BUNDLE DESTINATION .

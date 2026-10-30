@@ -216,6 +216,57 @@ TEST_CASE("settings page exposes the language selector and retranslates after ac
     CHECK_FALSE(settings.saving());
     CHECK_FALSE(settings.saveFailed());
     CHECK(mv::settings().language == "fr");
+    auto* theme = page->findChild<QObject*>("themeSelector");
+    REQUIRE(theme);
+    CHECK(theme->property("currentIndex").toInt() == 0);
+    REQUIRE(QMetaObject::invokeMethod(theme, "activated", Q_ARG(int, 1)));
+    CHECK(settings.darkTheme());
+    CHECK(theme->property("currentIndex").toInt() == 1);
+    QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+    saving.exec();
+    REQUIRE_FALSE(settings.saving());
+    CHECK_FALSE(settings.saveFailed());
+    CHECK(mv::settings().dark_theme);
+    CHECK(mv::settings().language == "fr");
+}
+
+TEST_CASE("theme applies immediately and persists across restarts without changing language") {
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    const auto path = (directory.path() + "/theme.db").toStdString();
+    for (const bool dark : {true, false}) {
+        {
+            mv::Services services;
+            REQUIRE(services.initialize(path));
+            AppSettings settings;
+            CHECK(settings.darkTheme() == !dark);
+            QEventLoop saving;
+            QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+                if (!settings.saving()) saving.quit();
+            });
+            QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+            settings.selectTheme(dark);
+            CHECK(settings.darkTheme() == dark);
+            CHECK(settings.saving());
+            settings.selectLanguage(1); // Theme and language share the pending-save guard.
+            settings.selectTheme(!dark);
+            CHECK(settings.darkTheme() == dark);
+            saving.exec();
+            REQUIRE_FALSE(settings.saving());
+            CHECK_FALSE(settings.saveFailed());
+            CHECK(mv::settings().dark_theme == dark);
+            CHECK(mv::settings().language.empty());
+        }
+        {
+            mv::Services services;
+            REQUIRE(services.initialize(path));
+            AppSettings settings;
+            CHECK(settings.darkTheme() == dark);
+            settings.selectTheme(dark);
+            CHECK_FALSE(settings.saving());
+            CHECK(mv::settings().language.empty());
+        }
+    }
 }
 
 int main(int argc, char** argv) {

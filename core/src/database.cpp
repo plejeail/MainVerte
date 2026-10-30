@@ -409,7 +409,7 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
 std::optional<mv::Settings> Database::read_settings() {
     static constexpr const char* sql =
         "SELECT (SELECT id FROM gardener WHERE id = current_gardener_id AND id > 0), "
-        "current_collection_id, language FROM settings WHERE id = 1";
+        "current_collection_id, language, dark_theme FROM settings WHERE id = 1";
     auto fail = [this]() -> std::optional<mv::Settings> {
         log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}", sqlite3_errmsg(_handle));
         if (_statement_read_settings) {
@@ -438,26 +438,41 @@ std::optional<mv::Settings> Database::read_settings() {
         const auto value = sqlite3_column_int64(statement, column);
         *fields[column] = static_cast<mv::id_t>(value);
     }
+
     if (sqlite3_column_type(statement, 2) != SQLITE_TEXT) {
         return fail();
     }
+
     const auto* language = sqlite3_column_text(statement, 2);
     if (language == nullptr) {
         return fail();
     }
+
     settings.language.assign(reinterpret_cast<const char*>(language), sqlite3_column_bytes(statement, 2));
+    if (sqlite3_column_type(statement, 3) != SQLITE_INTEGER) {
+        return fail();
+    }
+
+    const auto dark_theme = sqlite3_column_int64(statement, 3);
+    if (dark_theme != 0 && dark_theme != 1) {
+        return fail();
+    }
+
+    settings.dark_theme = dark_theme == 1;
     if (sqlite3_step(statement) != SQLITE_DONE) {
         return fail();
     }
+
     if (sqlite3_reset(statement) != SQLITE_OK) {
         return fail();
     }
+
     return settings;
 }
 
 bool Database::write_settings(const mv::Settings& settings) {
     static constexpr const char* sql =
-        "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2, language = ?3 WHERE id = 1";
+        "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2, language = ?3, dark_theme = ?4 WHERE id = 1";
     auto fail = [this] {
         log_err("DB: cannot write settings (missing row or SQLite error): {}", sqlite3_errmsg(_handle));
         if (_statement_write_settings) {
@@ -483,6 +498,9 @@ bool Database::write_settings(const mv::Settings& settings) {
         return fail();
     }
 
+    if (sqlite3_bind_int(statement, 4, settings.dark_theme ? 1 : 0) != SQLITE_OK) {
+        return fail();
+    }
     if (sqlite3_step(statement) != SQLITE_DONE || sqlite3_changes(_handle) != 1) {
         return fail();
     }

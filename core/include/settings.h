@@ -11,5 +11,6 @@ struct Settings {
     int64_t current_gardener_id{Undefined};
     int64_t current_collection_id{Undefined};
     std::string language;
+    bool dark_theme{false};
 };
 }  // namespace mv

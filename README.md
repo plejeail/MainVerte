@@ -9,6 +9,7 @@ written in C++23 with Qt Quick/QML and SQLite.
 - CMake >= 3.25 and a C/C++ toolchain with C++23 support.
 - Qt >= 6.12 with Qt Quick and Qt Quick Controls 2, built for the selected
   compiler and target platform.
+- Qt Quick Test from the same Qt kit when `BUILD_TESTING=ON`.
 - A host Python interpreter >= 3.9 for translation generation, including when
   cross-compiling for Android. No third-party Python packages are needed.
 - For Android: a Qt Android kit and its compatible Android SDK, NDK and JDK.
@@ -60,6 +61,14 @@ To build and run on Android, open the root `CMakeLists.txt` in Qt Creator, selec
 the Android kit and ABI, and use a separate build directory (for example,
 `build/android-arm64`). Build `appMainVerte` and run it on a matching device or
 emulator. Desktop builds and tests do not validate Android deployment.
+
+## Visual style and component showcase
+
+The app uses the bundled MainVerte Qt Quick Controls style. Appearance settings
+switch between light and dark themes at runtime. Run `appMainVerte --showcase`
+to inspect the separate component gallery without opening the journal database.
+See [the design system guide](docs/design-system.md) for tokens, component
+coverage, extension rules, and validation commands.
 
 ## Application data
 
