@@ -191,36 +191,36 @@ bool detail::migrate_script(sqlite3* handle, std::string_view script, size_t ver
 }
 
 Database::Database()
-: statement_create_gardener(nullptr, sqlite3_finalize)
-, statement_read_settings(nullptr, sqlite3_finalize)
-, statement_write_settings(nullptr, sqlite3_finalize)
+: _statement_create_gardener(nullptr, sqlite3_finalize)
+, _statement_read_settings(nullptr, sqlite3_finalize)
+, _statement_write_settings(nullptr, sqlite3_finalize)
 {}
 
 Database::~Database() {
-    if (thread.joinable()) {
+    if (_thread.joinable()) {
         {
-            std::lock_guard lock(mutex);
-            state = State::Stopping;
+            std::lock_guard lock(_mutex);
+            _state = State::Stopping;
         }
-        wake.notify_one();
-        thread.join();
+        _wake.notify_one();
+        _thread.join();
     }
 
-    sqlite3_close_v2(handle);
+    sqlite3_close_v2(_handle);
 }
 
 void Database::start() {
-    std::lock_guard lock(mutex);
-    assert(handle != nullptr);
-    assert(state == State::Initialized);
+    std::lock_guard lock(_mutex);
+    assert(_handle != nullptr);
+    assert(_state == State::Initialized);
 
-    if (state != State::Initialized) {
-        log_err("DB::start invalid state {}", to_string(state));
+    if (_state != State::Initialized) {
+        log_err("DB::start invalid state {}", to_string(_state));
         return;
     }
 
-    state = State::Running;
-    thread = std::thread([this]{ thread_loop(); });
+    _state = State::Running;
+    _thread = std::thread([this]{ thread_loop(); });
 }
 
 bool Database::submit(Job job) {
@@ -228,23 +228,23 @@ bool Database::submit(Job job) {
         return false;
     }
     {
-        std::lock_guard lock(mutex);
-        if (state != State::Running) {
+        std::lock_guard lock(_mutex);
+        if (_state != State::Running) {
             return false;
         }
-        assert(handle != nullptr);
-        jobs.push_back(std::move(job));
+        assert(_handle != nullptr);
+        _jobs.push_back(std::move(job));
     }
-    wake.notify_one();
+    _wake.notify_one();
     return true;
 }
 
 bool Database::initialize(const std::string& path) {
-    std::lock_guard lock(mutex);
-    assert(handle == nullptr);
-    assert(state == State::Uninitialized);
+    std::lock_guard lock(_mutex);
+    assert(_handle == nullptr);
+    assert(_state == State::Uninitialized);
 
-    if (state != State::Uninitialized) {
+    if (_state != State::Uninitialized) {
         log_dbg("DB: already initialized");
         return true;
     }
@@ -271,36 +271,36 @@ bool Database::initialize(const std::string& path) {
         return false;
     }
 
-    ec = sqlite3_open_v2(path.c_str(), &handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE,
+    ec = sqlite3_open_v2(path.c_str(), &_handle, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_EXRESCODE,
                          nullptr);
     if (ec != SQLITE_OK) {
         log_err("DB: cannot open database: {}", get_error(ec));
-        sqlite3_close_v2(handle);
-        handle = nullptr;
+        sqlite3_close_v2(_handle);
+        _handle = nullptr;
         return false;
     }
 
-    if (!detail::configure_database(handle)) {
+    if (!detail::configure_database(_handle)) {
         log_err("DB: failed to configure database");
-        sqlite3_close_v2(handle);
-        handle = nullptr;
+        sqlite3_close_v2(_handle);
+        _handle = nullptr;
         return false;
     }
 
-    auto current_version = get_database_version(handle);
+    auto current_version = get_database_version(_handle);
     if (!current_version.has_value() || !migrate_database<DATABASE_VERSION>(*current_version)) {
-        sqlite3_close_v2(handle);
-        handle = nullptr;
+        sqlite3_close_v2(_handle);
+        _handle = nullptr;
         return false;
     }
 
-    state = State::Initialized;
+    _state = State::Initialized;
     return true;
 }
 
 template<size_t software_version>
 bool Database::migrate_database(size_t current_version) {
-    assert(handle != nullptr);
+    assert(_handle != nullptr);
 
     if (current_version > 1'000'000) {
         log_err("DB: version is suspicously big");
@@ -315,7 +315,7 @@ bool Database::migrate_database(size_t current_version) {
     bool success = true;
     for (size_t v = current_version; v < software_version; ++v) {
 
-        if (!detail::migrate_script(handle, mv::sql::scripts[v], v + 1)) {
+        if (!detail::migrate_script(_handle, mv::sql::scripts[v], v + 1)) {
             return false;
         }
     }
@@ -324,20 +324,20 @@ bool Database::migrate_database(size_t current_version) {
 }
 
 void Database::thread_loop() {
-    std::unique_lock lock(mutex);
-    assert(handle != nullptr);
-    assert(state == State::Running || state == State::Stopping);
+    std::unique_lock lock(_mutex);
+    assert(_handle != nullptr);
+    assert(_state == State::Running || _state == State::Stopping);
 
     for (;;) {
-        wake.wait(lock, [this] { return state == State::Stopping || !jobs.empty(); });
-        if (jobs.empty() && state == State::Stopping) {
+        _wake.wait(lock, [this] { return _state == State::Stopping || !_jobs.empty(); });
+        if (_jobs.empty() && _state == State::Stopping) {
             return;
         }
 
-        auto job = std::move(jobs.front());
-        jobs.pop_front();
+        auto job = std::move(_jobs.front());
+        _jobs.pop_front();
         lock.unlock();
-        job(handle);
+        job(_handle);
         job = nullptr;  // Destroy captures outside the queue lock as well.
         lock.lock();
     }
@@ -346,12 +346,12 @@ void Database::thread_loop() {
 int64_t Database::create_gardener(const std::string& name) {
     static constexpr const char* sql = "INSERT INTO gardener(display_name, created_at) VALUES (?1, unixepoch())";
 
-    if (!prepare_statement(handle, statement_create_gardener, sql)) {
+    if (!prepare_statement(_handle, _statement_create_gardener, sql)) {
         // assert(false);
         return -1;
     }
 
-    auto* statement = statement_create_gardener.get();
+    auto* statement = _statement_create_gardener.get();
     auto str_size = static_cast<sqlite3_uint64>(name.size());
     int bind_rc = sqlite3_bind_text64(statement, 1, name.data(), str_size, TRANSIENT, SQLITE_UTF8);
     if (bind_rc != SQLITE_OK) {
@@ -365,17 +365,17 @@ int64_t Database::create_gardener(const std::string& name) {
         return -1;
     }
 
-    return sqlite3_last_insert_rowid(handle);
+    return sqlite3_last_insert_rowid(_handle);
 }
 
 mv::GardenerResult Database::create_and_select_gardener(const std::string& name) {
     bool transaction_started = false;
     const auto fail = [this, &transaction_started](const char* stage) -> mv::GardenerResult {
         auto message = std::format("DB: cannot create and select gardener ({}): {}",
-                                   stage, sqlite3_errmsg(handle));
+                                   stage, sqlite3_errmsg(_handle));
         log_err(message);
-        if (transaction_started && !sqlite3_get_autocommit(handle) && !execute(handle, "ROLLBACK;")) {
-            const auto rollback_error = std::format("; rollback failed: {}", sqlite3_errmsg(handle));
+        if (transaction_started && !sqlite3_get_autocommit(_handle) && !execute(_handle, "ROLLBACK;")) {
+            const auto rollback_error = std::format("; rollback failed: {}", sqlite3_errmsg(_handle));
             log_err(rollback_error);
             message += rollback_error;
         }
@@ -383,7 +383,7 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
             .code = mv::MainverteError::Code::Database, .message = std::move(message)});
     };
 
-    if (!begin_transaction(handle)) {
+    if (!begin_transaction(_handle)) {
         return fail("begin");
     }
     transaction_started = true;
@@ -400,7 +400,7 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
     if (!write_settings(*settings)) {
         return fail("select");
     }
-    if (!end_transaction(handle)) {
+    if (!end_transaction(_handle)) {
         return fail("commit");
     }
     return mv::Gardener{.id = id, .name = name};
@@ -409,18 +409,18 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
 std::optional<mv::Settings> Database::read_settings() {
     static constexpr const char* sql =
         "SELECT (SELECT id FROM gardener WHERE id = current_gardener_id AND id > 0), "
-        "current_collection_id FROM settings WHERE id = 1";
+        "current_collection_id, language FROM settings WHERE id = 1";
     auto fail = [this]() -> std::optional<mv::Settings> {
-        log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}", sqlite3_errmsg(handle));
-        if (statement_read_settings) {
-            sqlite3_reset(statement_read_settings.get());
+        log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}", sqlite3_errmsg(_handle));
+        if (_statement_read_settings) {
+            sqlite3_reset(_statement_read_settings.get());
         }
         return std::nullopt;
     };
-    if (!prepare_statement(handle, statement_read_settings, sql)) {
+    if (!prepare_statement(_handle, _statement_read_settings, sql)) {
         return fail();
     }
-    auto* statement = statement_read_settings.get();
+    auto* statement = _statement_read_settings.get();
     if (sqlite3_step(statement) != SQLITE_ROW) {
         return fail();
     }
@@ -438,6 +438,14 @@ std::optional<mv::Settings> Database::read_settings() {
         const auto value = sqlite3_column_int64(statement, column);
         *fields[column] = static_cast<mv::id_t>(value);
     }
+    if (sqlite3_column_type(statement, 2) != SQLITE_TEXT) {
+        return fail();
+    }
+    const auto* language = sqlite3_column_text(statement, 2);
+    if (language == nullptr) {
+        return fail();
+    }
+    settings.language.assign(reinterpret_cast<const char*>(language), sqlite3_column_bytes(statement, 2));
     if (sqlite3_step(statement) != SQLITE_DONE) {
         return fail();
     }
@@ -449,18 +457,18 @@ std::optional<mv::Settings> Database::read_settings() {
 
 bool Database::write_settings(const mv::Settings& settings) {
     static constexpr const char* sql =
-        "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2 WHERE id = 1";
+        "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2, language = ?3 WHERE id = 1";
     auto fail = [this] {
-        log_err("DB: cannot write settings (missing row or SQLite error): {}", sqlite3_errmsg(handle));
-        if (statement_write_settings) {
-            sqlite3_reset(statement_write_settings.get());
+        log_err("DB: cannot write settings (missing row or SQLite error): {}", sqlite3_errmsg(_handle));
+        if (_statement_write_settings) {
+            sqlite3_reset(_statement_write_settings.get());
         }
         return false;
     };
-    if (!prepare_statement(handle, statement_write_settings, sql)) {
+    if (!prepare_statement(_handle, _statement_write_settings, sql)) {
         return fail();
     }
-    auto* statement = statement_write_settings.get();
+    auto* statement = _statement_write_settings.get();
     std::array fields{settings.current_gardener_id, settings.current_collection_id};
     for (int column = 0; column < 2; ++column) {
         const int rc = fields[column] == 0
@@ -470,8 +478,12 @@ bool Database::write_settings(const mv::Settings& settings) {
             return fail();
         }
     }
-    // A single UPDATE keeps both fields atomic, including on constraint failures.
-    if (sqlite3_step(statement) != SQLITE_DONE || sqlite3_changes(handle) != 1) {
+    if (sqlite3_bind_text64(statement, 3, settings.language.data(), settings.language.size(),
+                            SQLITE_TRANSIENT, SQLITE_UTF8) != SQLITE_OK) {
+        return fail();
+    }
+
+    if (sqlite3_step(statement) != SQLITE_DONE || sqlite3_changes(_handle) != 1) {
         return fail();
     }
     if (sqlite3_reset(statement) != SQLITE_OK) {

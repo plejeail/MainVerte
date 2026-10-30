@@ -5,6 +5,7 @@
 #include <QLocale>
 #include <QQmlEngine>
 #include <QString>
+#include <QVariantMap>
 
 #include "generated_translations.hpp"
 
@@ -26,6 +27,33 @@ std::array<std::string_view, ts::Lang_Count> ts::list_languages() {
     return res;
 }
 
+QVariantList ts::language_options() {
+    QVariantList result;
+    for (const auto code : ts::list_languages()) {
+        const auto language = QString::fromUtf8(code.data(), code.size());
+        const QLocale locale(language);
+        const QString resource = QStringLiteral("qrc:/img/flag_%1.svg").arg(language);
+        result.append(
+            QVariantMap{
+                {"code", language},
+                {"label", locale.nativeLanguageName()},
+                {"flag", resource}
+            }
+        );
+    }
+    return result;
+}
+
+int ts::language_index() {
+    const auto codes = ts::list_languages();
+    for (std::size_t i = 0; i < codes.size(); ++i) {
+        if (codes[i] == ts::current_language()) {
+            return static_cast<int>(i);
+        }
+    }
+    return 0;
+}
+
 bool ts::select_language(std::string_view lang) {
     for (const auto& candidate : mv::i18n::languages) {
         if (candidate.code == lang) {
@@ -42,7 +70,7 @@ bool ts::select_system_language() {
     const auto preferences = QLocale::system().uiLanguages(QLocale::TagSeparator::Underscore);
 
     for (const QString& language : preferences) {
-        const QByteArray code = language.toUtf8();
+        const QByteArray code = language.section('_', 0, 0).toUtf8();
         std::string_view code_str{code.constData(), static_cast<std::size_t>(code.size())};
         if (ts::select_language(code_str)) {
             return true;
@@ -50,6 +78,16 @@ bool ts::select_system_language() {
     }
 
     return ts::select_language("en");
+}
+
+void ts::select_initial_language(std::string_view saved_language) {
+    if (!saved_language.empty()) {
+        if (select_language(saved_language)) {
+            return;
+        }
+        qWarning() << "failed to select registered language" << saved_language;
+    }
+    select_system_language();
 }
 
 std::string_view ts::current_language() {

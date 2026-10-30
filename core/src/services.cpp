@@ -42,6 +42,7 @@ bool mv::Services::initialize(std::string_view database_path) {
         return true;
     }
 
+    MEASURE("Services::initialize");
     initialized = true;
 
     assert(services_instance == nullptr);

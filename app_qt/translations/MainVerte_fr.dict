@@ -13,3 +13,6 @@ Gardener_NameTooLong,Le nom doit contenir au plus 30 caractères.
 Gardener_ServiceUnavailable,Le service de sauvegarde n’est pas disponible.
 Gardener_CreateFailed,Impossible de créer ce jardinier. Réessaie.
 Gardener_SaveFailed,Impossible de sauvegarder la sélection. Réessaie.
+Gardener_LanguageLabel,Langue
+Settings_LanguageLabel,Langue
+Settings_LanguageSaveFailed,Impossible de sauvegarder la langue. Sélectionnez-la à nouveau pour réessayer.

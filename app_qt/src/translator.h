@@ -2,6 +2,7 @@
 
 #include <QString>
 #include <QObject>
+#include <QVariantList>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include "generated_translations.hpp"
@@ -12,9 +13,13 @@ static constexpr auto Lang_Count = mv::i18n::languages.size();
 
 std::array<std::string_view, Lang_Count> list_languages();
 
+QVariantList language_options();
+int language_index();
+
 // not thread-wise
 bool select_language(std::string_view lang);
 bool select_system_language();
+void select_initial_language(std::string_view saved_language);
 std::string_view current_language();
 [[nodiscard]] QString get(TextId id);
 }  // namespace ts

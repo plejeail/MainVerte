@@ -215,6 +215,76 @@ Page {
                     }
 
                     Text {
+                        color: "#D4EFD1"
+                        font.bold: true
+                        font.pixelSize: 12
+                        text: Ts.get(TextId.Gardener_LanguageLabel)
+                    }
+
+                    ComboBox {
+                        id: languageBox
+
+                        Accessible.name: Ts.get(TextId.Gardener_LanguageLabel)
+                        model: setupWizard.languages
+                        textRole: "label"
+                        currentIndex: setupWizard.languageIndex
+                        enabled: !setupWizard.busy
+                        width: parent.width
+                        height: 58
+                        leftPadding: 14
+                        rightPadding: 32
+
+                        background: Rectangle {
+                            color: "#0D382B"
+                            border.color: languageBox.activeFocus ? "#D2F6BB" : "#92CBA0"
+                            radius: 12
+                        }
+                        contentItem: Row {
+                            spacing: 12
+                            Image {
+                                source: languageBox.currentIndex >= 0 ? languageBox.model[languageBox.currentIndex].flag : ""
+                                width: 28
+                                height: parent.height
+                                fillMode: Image.PreserveAspectFit
+                            }
+                            Text {
+                                text: languageBox.displayText
+                                color: "#F2FFE9"
+                                font.pixelSize: 17
+                                height: parent.height
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                        }
+                        delegate: ItemDelegate {
+                            required property var modelData
+                            required property int index
+                            width: languageBox.width
+                            highlighted: languageBox.highlightedIndex === index
+                            contentItem: Row {
+                                spacing: 12
+                                Image {
+                                    source: modelData.flag
+                                    width: 28
+                                    height: 24
+                                    fillMode: Image.PreserveAspectFit
+                                }
+                                Text {
+                                    text: modelData.label
+                                    color: "#F2FFE9"
+                                    font.pixelSize: 17
+                                }
+                            }
+                            background: Rectangle {
+                                color: parent.highlighted ? "#477B5B" : "#0D382B"
+                            }
+                        }
+                        onActivated: index => {
+                            window.errorMessage = "";
+                            setupWizard.selectLanguage(index);
+                        }
+                    }
+
+                    Text {
                         color: "#FFD3C7"
                         font.pixelSize: 14
                         text: window.errorMessage

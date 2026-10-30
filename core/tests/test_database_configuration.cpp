@@ -1,3 +1,4 @@
+// clazy:skip
 #include <chrono>
 #include <cstring>
 #include <filesystem>

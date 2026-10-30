@@ -1,3 +1,4 @@
+// clazy:skip
 #include <string_view>
 
 #include "tools.h"

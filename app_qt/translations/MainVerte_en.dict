@@ -13,3 +13,6 @@ Gardener_NameTooLong,The name must contain at most 30 characters.
 Gardener_ServiceUnavailable,The save service is unavailable.
 Gardener_CreateFailed,Unable to create this gardener. Please retry.
 Gardener_SaveFailed,Unable to save your selection. Please retry.
+Gardener_LanguageLabel,Language
+Settings_LanguageLabel,Language
+Settings_LanguageSaveFailed,Unable to save the language. Please select it again to retry.

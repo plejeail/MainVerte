@@ -69,15 +69,15 @@ private:
 
     template <size_t software_version> bool migrate_database(size_t current_version);
 
-    State                   state = State::Uninitialized;
-    std::mutex              mutex;
-    std::condition_variable wake;
-    sqlite3*                handle = nullptr;
-    std::deque<Job>         jobs;
-    std::thread             thread;
-    statement_ptr           statement_create_gardener;
-    statement_ptr           statement_read_settings;
-    statement_ptr           statement_write_settings;
+    State                   _state = State::Uninitialized;
+    std::mutex              _mutex;
+    std::condition_variable _wake;
+    sqlite3*                _handle = nullptr;
+    std::deque<Job>         _jobs;
+    std::thread             _thread;
+    statement_ptr           _statement_create_gardener;
+    statement_ptr           _statement_read_settings;
+    statement_ptr           _statement_write_settings;
 };
 
 namespace detail {
