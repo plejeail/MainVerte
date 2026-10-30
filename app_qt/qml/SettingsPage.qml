@@ -71,8 +71,24 @@ Page {
         }
 
         Label {
+            text: Ts.get(TextId.Appearance_Title)
+            font.bold: true
+        }
+
+        ComboBox {
+            objectName: "themeSelector"
             Layout.fillWidth: true
-            text: Ts.get(TextId.Settings_LanguageSaveFailed)
+            Layout.maximumWidth: 360
+            Accessible.name: Ts.get(TextId.Appearance_Title)
+            model: [Ts.get(TextId.Theme_Light), Ts.get(TextId.Theme_Dark)]
+            currentIndex: appSettings.darkTheme ? 1 : 0
+            enabled: !appSettings.saving
+            onActivated: index => appSettings.selectTheme(index === 1)
+        }
+
+        Label {
+            Layout.fillWidth: true
+            text: Ts.get(TextId.Settings_SaveFailed)
             visible: appSettings.saveFailed
             wrapMode: Text.WordWrap
             color: "#B3261E"

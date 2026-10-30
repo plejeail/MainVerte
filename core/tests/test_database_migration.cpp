@@ -52,3 +52,21 @@ TEST_CASE("Language migration preserves existing gardener and collection setting
     CHECK(db.scalar("SELECT count(*) FROM gardener WHERE display_name='Camille'") == 1);
     CHECK(db.scalar("SELECT language = '' FROM settings") == 1);
 }
+
+TEST_CASE("Theme migration preserves existing settings and defaults to light") {
+    TestDatabase db;
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[1], 2));
+    REQUIRE(sqlite3_exec(db.handle,
+        "INSERT INTO gardener VALUES(7, 'Camille', 0);"
+        "INSERT INTO collection VALUES(9, 7, 'Garden', 0, 0);"
+        "UPDATE settings SET current_gardener_id=7, current_collection_id=9, language='fr';",
+        nullptr, nullptr, nullptr) == SQLITE_OK);
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[2], 3));
+    CHECK(db.scalar("PRAGMA user_version") == 3);
+    CHECK(db.scalar("SELECT current_gardener_id FROM settings") == 7);
+    CHECK(db.scalar("SELECT current_collection_id FROM settings") == 9);
+    CHECK(db.scalar("SELECT language='fr' FROM settings") == 1);
+    CHECK(db.scalar("SELECT dark_theme FROM settings") == 0);
+    CHECK(sqlite3_exec(db.handle, "UPDATE settings SET dark_theme=2", nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+}

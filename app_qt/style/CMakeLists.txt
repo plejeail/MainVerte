@@ -1,0 +1,81 @@
+qt_add_library(mainverte_style STATIC)
+set_source_files_properties(Tokens.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+qt_add_qml_module(mainverte_style
+    URI MainVerteStyle
+    VERSION 6.12
+    CLASS_NAME MainVerteStylePlugin
+    QML_FILES
+        widgets/ActionContent.qml
+        widgets/AbstractButton.qml
+        widgets/ApplicationWindow.qml
+        widgets/BusyIndicator.qml
+        widgets/Button.qml
+        widgets/CheckBox.qml
+        widgets/CheckDelegate.qml
+        widgets/ComboBox.qml
+        widgets/Container.qml
+        widgets/Control.qml
+        widgets/ControlSurface.qml
+        widgets/DayOfWeekRow.qml
+        widgets/DelayButton.qml
+        widgets/Dial.qml
+        widgets/Dialog.qml
+        widgets/DialogButtonBox.qml
+        widgets/DoubleSpinBox.qml
+        widgets/Drawer.qml
+        widgets/Frame.qml
+        widgets/GroupBox.qml
+        widgets/HorizontalHeaderView.qml
+        widgets/HorizontalHeaderViewDelegate.qml
+        widgets/ItemDelegate.qml
+        widgets/Label.qml
+        widgets/Menu.qml
+        widgets/MenuBar.qml
+        widgets/MenuBarItem.qml
+        widgets/MenuItem.qml
+        widgets/MenuSeparator.qml
+        widgets/MonthGrid.qml
+        widgets/Page.qml
+        widgets/PageIndicator.qml
+        widgets/Pane.qml
+        widgets/Popup.qml
+        widgets/ProgressBar.qml
+        widgets/RadioButton.qml
+        widgets/RadioDelegate.qml
+        widgets/RangeSlider.qml
+        widgets/RoundButton.qml
+        widgets/ScrollBar.qml
+        widgets/ScrollIndicator.qml
+        widgets/ScrollView.qml
+        widgets/SearchField.qml
+        widgets/SelectionIndicator.qml
+        widgets/SelectionRectangle.qml
+        widgets/Slider.qml
+        widgets/SliderHandle.qml
+        widgets/SliderTrack.qml
+        widgets/SpinBox.qml
+        widgets/SplitView.qml
+        widgets/StackView.qml
+        widgets/Surface.qml
+        widgets/SwipeDelegate.qml
+        widgets/SwipeView.qml
+        widgets/Switch.qml
+        widgets/SwitchDelegate.qml
+        widgets/SwitchIndicator.qml
+        widgets/TabBar.qml
+        widgets/TabButton.qml
+        widgets/TableViewDelegate.qml
+        widgets/TextArea.qml
+        widgets/TextField.qml
+        Tokens.qml
+        widgets/ToolBar.qml
+        widgets/ToolButton.qml
+        widgets/ToolSeparator.qml
+        widgets/ToolTip.qml
+        widgets/TreeViewDelegate.qml
+        widgets/Tumbler.qml
+        widgets/VerticalHeaderView.qml
+        widgets/VerticalHeaderViewDelegate.qml
+        widgets/WeekNumberColumn.qml
+)
+target_link_libraries(mainverte_style PRIVATE Qt6::QuickControls2)

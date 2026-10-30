@@ -15,4 +15,7 @@ Gardener_CreateFailed,Unable to create this gardener. Please retry.
 Gardener_SaveFailed,Unable to save your selection. Please retry.
 Gardener_LanguageLabel,Language
 Settings_LanguageLabel,Language
-Settings_LanguageSaveFailed,Unable to save the language. Please select it again to retry.
+Settings_SaveFailed,Unable to save settings. Please try again.
+Appearance_Title,Appearance
+Theme_Light,Light
+Theme_Dark,Dark

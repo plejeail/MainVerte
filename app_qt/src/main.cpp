@@ -2,12 +2,15 @@
 
 #include <QDir>
 #include <QGuiApplication>
+#include <QLocale>
 #include <QObject>
 #include <QPointer>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QQuickStyle>
 #include <QStandardPaths>
 #include <Qt>
+#include <QtQml/QQmlExtensionPlugin>
 #include <QWindow>
 
 #include "app_settings.h"
@@ -16,6 +19,9 @@
 #include "translator.h"
 #include "widget_wizard_setup.h"
 
+
+Q_IMPORT_QML_PLUGIN(MainVerteStylePlugin)
+Q_IMPORT_QML_PLUGIN(MainVerteShowcasePlugin)
 
 namespace {
 void on_object_creation_failed() {
@@ -29,6 +35,17 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     Stopwatch sw_app_init("app init");
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("MainVerte"));
+    QQuickStyle::setStyle(QStringLiteral("MainVerteStyle"));
+    QQuickStyle::setFallbackStyle(QStringLiteral("Basic"));
+
+    // The gallery is isolated from Core initialization and never opens the journal database.
+    if (app.arguments().contains(QStringLiteral("--showcase"))) {
+        QQmlApplicationEngine showcase_engine;
+        QObject::connect(&showcase_engine, &QQmlApplicationEngine::objectCreationFailed,
+                         &app, &on_object_creation_failed, Qt::QueuedConnection);
+        showcase_engine.loadFromModule("MainVerte.Showcase", "Showcase");
+        return QGuiApplication::exec();
+    }
 
     const QString data_directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     if (data_directory.isEmpty()) {
@@ -56,6 +73,15 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     QObject::connect(app_settings, &AppSettings::languageChanged,
                      &engine,      &QQmlEngine::retranslate);
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), app_settings);
+    auto* tokens = engine.singletonInstance<QObject*>("MainVerteStyle", "Tokens");
+    if (tokens == nullptr) {
+        qCritical() << "Cannot load style tokens.";
+        return EXIT_FAILURE;
+    }
+    tokens->setProperty("dark", app_settings->darkTheme());
+    QObject::connect(app_settings, &AppSettings::themeChanged, tokens, [tokens, app_settings] {
+        tokens->setProperty("dark", app_settings->darkTheme());
+    });
     if (settings.current_gardener_id > 0) {
         engine.loadFromModule("MainVerte", "Main");
     } else {
