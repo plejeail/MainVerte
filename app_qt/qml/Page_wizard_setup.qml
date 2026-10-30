@@ -101,33 +101,14 @@ Page {
             x: (scroll.width - width) / 2
             y: (scroll.contentHeight - implicitHeight) / 2
 
-            Rectangle {
+            Image {
                 anchors.horizontalCenter: parent.horizontalCenter
-                border.color: "#638E6B"
-                border.width: 1
-                color: "#275C43"
-                height: 68
-                radius: 22
-                width: 68
-
-                Rectangle {
-                    anchors.centerIn: parent
-                    color: "#BEE8AA"
-                    height: 34
-                    radius: 18
-                    rotation: 42
-                    width: 22
-                }
-
-                Rectangle {
-                    color: "#D5F4C6"
-                    height: 24
-                    radius: 2
-                    rotation: -38
-                    width: 3
-                    x: 28
-                    y: 32
-                }
+                fillMode: Image.PreserveAspectFit
+                height: 96
+                source: "qrc:/img/logo_mainverte.svg"
+                sourceSize.width: width * Screen.devicePixelRatio
+                sourceSize.height: height * Screen.devicePixelRatio
+                width: 96
             }
 
             Text {

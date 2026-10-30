@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QGuiApplication>
+#include <QIcon>
 #include <QLocale>
 #include <QObject>
 #include <QPointer>
@@ -19,6 +20,10 @@
 #include "translator.h"
 #include "widget_wizard_setup.h"
 
+#ifdef Q_OS_ANDROID
+#include "setup_system_bars.android.h"
+#endif
+
 
 Q_IMPORT_QML_PLUGIN(MainVerteStylePlugin)
 Q_IMPORT_QML_PLUGIN(MainVerteShowcasePlugin)
@@ -35,6 +40,7 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     Stopwatch sw_app_init("app init");
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("MainVerte"));
+    QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/img/logo_mainverte.png")));
     QQuickStyle::setStyle(QStringLiteral("MainVerteStyle"));
     QQuickStyle::setFallbackStyle(QStringLiteral("Basic"));
 
@@ -87,6 +93,12 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     } else {
         run_setup_wizard(engine, core_services);
     }
+#ifdef Q_OS_ANDROID
+    const auto roots = engine.rootObjects();
+    auto* setup_window = settings.current_gardener_id <= 0 && !roots.isEmpty()
+        ? qobject_cast<QWindow*>(roots.first()) : nullptr;
+    configure_app_system_bars(*app_settings, setup_window);
+#endif
 
     sw_app_init.stop();
 

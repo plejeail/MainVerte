@@ -44,9 +44,25 @@ qt_add_executable(appMainVerte
     ${APP_CPP_FILES}
 )
 
+if(WIN32)
+    configure_file(img/app_icon.rc.in app_icon.rc @ONLY)
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc" PROPERTIES
+        OBJECT_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/img/logo_mainverte.ico"
+    )
+    add_library(mainverte_app_icon OBJECT "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc")
+    target_sources(appMainVerte PRIVATE $<TARGET_OBJECTS:mainverte_app_icon>)
+elseif(ANDROID)
+    set_target_properties(appMainVerte PROPERTIES
+        QT_ANDROID_PACKAGE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/android"
+        QT_ANDROID_APP_ICON "@mipmap/ic_launcher"
+    )
+endif()
+
 qt_add_resources(appMainVerte "img"
     PREFIX "/"
     FILES
+        img/logo_mainverte.svg
+        img/logo_mainverte.png
         img/flag_en.svg
         img/flag_fr.svg
         img/flag_de.svg

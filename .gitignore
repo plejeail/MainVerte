@@ -14,8 +14,8 @@ $RECYCLE.BIN/
 *.ori
 *.qmlproject.user*
 *.rsuser
-*.sqlite
 *.sln.docstates
+*.sqlite
 *.stTheme.cache
 *.sublime-workspace
 *.suo
@@ -26,6 +26,7 @@ $RECYCLE.BIN/
 *.userosscache
 *.userprefs
 *creator.user*
+*nogit*
 .AppleDouble
 .DS_Store
 .LSOverride
