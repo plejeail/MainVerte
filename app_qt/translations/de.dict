@@ -1,0 +1,21 @@
+App_Title,MainVerte
+Collection_Title,Sammlung
+Parameters_Title,Einstellungen
+Gardener_Slogan,Bringen wir deinen Garten zum Wachsen
+Gardener_Profile,Lernen wir uns kennen. Wie möchtest du genannt werden?
+Gardener_NameLabel,Name des Gärtners
+Gardener_NamePlaceholder,Dein Name oder Spitzname
+Gardener_Privacy,Deine Daten bleiben auf deinem Gerät.
+Gardener_Busy,Dein Garten wird erstellt…
+Gardener_Create,Deinen Garten anlegen
+Gardener_NameRequired,"Gib einen Namen ein, um fortzufahren."
+Gardener_NameTooLong,Der Name darf höchstens 30 Zeichen enthalten.
+Gardener_ServiceUnavailable,Der Speicherdienst ist nicht verfügbar.
+Gardener_CreateFailed,Das Gärtnerprofil konnte nicht erstellt werden. Versuche es erneut.
+Gardener_SaveFailed,Deine Auswahl konnte nicht gespeichert werden. Versuche es erneut.
+Gardener_LanguageLabel,Sprache
+Settings_LanguageLabel,Sprache
+Settings_SaveFailed,Die Einstellungen konnten nicht gespeichert werden. Versuche es erneut.
+Appearance_Title,Darstellung
+Theme_Light,Hell
+Theme_Dark,Dunkel

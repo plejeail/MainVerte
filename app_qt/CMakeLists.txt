@@ -49,6 +49,8 @@ qt_add_resources(appMainVerte "img"
     FILES
         img/flag_en.svg
         img/flag_fr.svg
+        img/flag_de.svg
+        img/flag_es.svg
 )
 
 target_include_directories(appMainVerte PRIVATE
@@ -64,8 +66,10 @@ generate_translations(
     TARGET appMainVerte
     DESTINATION generated_translations.hpp
     DICTIONARIES
-        translations/MainVerte_en.dict
-        translations/MainVerte_fr.dict
+        translations/en.dict
+        translations/fr.dict
+        translations/de.dict
+        translations/es.dict
 )
 
 set_target_properties(appMainVerte PROPERTIES
@@ -100,11 +104,12 @@ if(BUILD_TESTING)
         src/widget_wizard_setup.cpp src/widget_wizard_setup.h
         src/translator.cpp src/translator.h src/platform.cpp
     )
-    qt_add_resources(mainverte_setup_tests "test_flags" PREFIX "/" FILES img/flag_en.svg img/flag_fr.svg)
+    qt_add_resources(mainverte_setup_tests "test_flags" PREFIX "/" FILES
+        img/flag_en.svg img/flag_fr.svg img/flag_de.svg img/flag_es.svg)
     target_include_directories(mainverte_setup_tests PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
     add_dependencies(mainverte_setup_tests appMainVerte)
     target_link_libraries(mainverte_setup_tests PRIVATE Qt6::Quick mainverte_core doctest::doctest project_warnings)
-    foreach(locale IN ITEMS fr_FR en_GB)
+    foreach(locale IN ITEMS fr_FR en_GB de_DE es_ES)
         add_test(NAME setup_language_${locale} COMMAND mainverte_setup_tests)
         set_tests_properties(setup_language_${locale} PROPERTIES
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANG=${locale}.UTF-8;LC_ALL=${locale}.UTF-8;LANGUAGE=${locale}")

@@ -31,7 +31,7 @@ TEST_CASE("wizard language is transient until gardener submission and survives r
         REQUIRE(ts::select_language("fr"));
         SetupWizard wizard(services);
         CHECK(wizard.languageIndex() == 1);
-        REQUIRE(wizard.languages().size() == 2);
+        REQUIRE(wizard.languages().size() == 4);
         if (explicit_choice) {
             wizard.selectLanguage(0);
             CHECK(ts::current_language() == "en");
@@ -69,13 +69,39 @@ TEST_CASE("wizard language is transient until gardener submission and survives r
     }
 }
 
-TEST_CASE("system locale uses supported base language or English fallback") {
+TEST_CASE("system language follows UI preferences with English fallback") {
+    // Regional formats and preferred UI languages can differ, notably on Windows.
+    const auto preferences = QLocale::system().uiLanguages();
+    QStringList supported;
+    for (const auto code : ts::list_languages()) {
+        supported.append(QString::fromUtf8(code.data(), code.size()));
+    }
+    QString expected = "en";
+    for (const auto& preference : preferences) {
+        const auto base = preference.section('-', 0, 0);
+        if (supported.contains(base)) {
+            expected = base;
+            break;
+        }
+    }
+    INFO("UI preferences: " << preferences.join(", ").toStdString());
     REQUIRE(ts::select_system_language());
-    const auto locale = QLocale::system().name();
-    if (locale.startsWith("fr")) {
-        CHECK(ts::current_language() == "fr");
-    } else {
-        CHECK(ts::current_language() == "en");
+    CHECK(ts::current_language() == expected.toStdString());
+}
+
+TEST_CASE("German and Spanish expose translated labels and embedded flags") {
+    const auto options = ts::language_options();
+    for (const auto* code : {"de", "es"}) {
+        ts::select_initial_language(code);
+        REQUIRE(ts::current_language() == code);
+        const bool german = ts::current_language() == "de";
+        CHECK(ts::get(ts::TextId::Settings_LanguageLabel) == (german ? "Sprache" : "Idioma"));
+        CHECK(ts::get(ts::TextId::Theme_Dark) == (german ? "Dunkel" : "Oscuro"));
+        const auto option = options[ts::language_index()].toMap();
+        CHECK(option.value("code").toString() == QString::fromUtf8(code));
+        CHECK_FALSE(option.value("label").toString().isEmpty());
+        const auto flag = option.value("flag").toString();
+        CHECK(QFile::exists(flag.mid(3))); // qrc:/ becomes :/ for QFile.
     }
 }
 
@@ -132,7 +158,7 @@ TEST_CASE("settings language applies immediately and persists without changing t
         REQUIRE(gardener_id > 0);
         ts::select_language("en");
         AppSettings settings;
-        REQUIRE(settings.languages().size() == 2);
+        REQUIRE(settings.languages().size() == 4);
         CHECK(settings.languageIndex() == 0);
         CHECK_FALSE(settings.saving());
         CHECK(mv::settings().language.empty());

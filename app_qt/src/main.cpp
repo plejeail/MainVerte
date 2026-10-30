@@ -88,7 +88,7 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
         run_setup_wizard(engine, core_services);
     }
 
-    sw_app_init.~Stopwatch();
+    sw_app_init.stop();
 
     return QGuiApplication::exec();
 }

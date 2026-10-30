@@ -21,7 +21,7 @@ class GeneratorTests(unittest.TestCase):
         self.output = self.root / "generated"
 
     def dictionary(self, text, language="en"):
-        path = self.root / f"MainVerte_{language}.dict"
+        path = self.root / f"{language}.dict"
         with path.open("w", encoding="utf-8", newline="") as destination:
             destination.write(text)
         return path
@@ -97,6 +97,13 @@ class GeneratorTests(unittest.TestCase):
         en = self.dictionary("A,a\n")
         with self.assertRaisesRegex(GENERATOR.DictionaryError, "duplicate language"):
             GENERATOR.generate([en, en], self.output)
+
+    def test_legacy_dictionary_name_is_rejected(self):
+        path = self.root / "MainVerte_en.dict"
+        path.write_text("A,a\n", encoding="utf-8")
+        with self.assertRaisesRegex(GENERATOR.DictionaryError, "expected <language>\\.dict"):
+            GENERATOR.generate([path], self.output)
+        self.assertFalse(self.output.exists())
 
     def test_utf8_bom_and_empty_translation(self):
         en = self.dictionary("\ufeffApp_Title,\n")

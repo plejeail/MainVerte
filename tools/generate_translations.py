@@ -65,9 +65,9 @@ def generate(paths, output_dir, output_name="generated_translations.hpp"):
     languages = set()
     reference = None
     for path in paths:
-        match = re.fullmatch(r"MainVerte_([a-z]{2,3}(?:_[A-Za-z0-9]+)*)\.dict", path.name)
+        match = re.fullmatch(r"([a-z]{2,3}(?:_[A-Za-z0-9]+)*)\.dict", path.name)
         if not match:
-            raise DictionaryError(f"{path}: expected MainVerte_<language>.dict")
+            raise DictionaryError(f"{path}: expected <language>.dict")
         language = match[1]
         if language in languages:
             raise DictionaryError(f"{path}: duplicate language {language!r}")

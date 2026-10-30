@@ -41,6 +41,7 @@ QVariantList ts::language_options() {
             }
         );
     }
+
     return result;
 }
 
@@ -51,6 +52,7 @@ int ts::language_index() {
             return static_cast<int>(i);
         }
     }
+
     return 0;
 }
 
@@ -85,8 +87,10 @@ void ts::select_initial_language(std::string_view saved_language) {
         if (select_language(saved_language)) {
             return;
         }
+
         qWarning() << "failed to select registered language" << saved_language;
     }
+
     select_system_language();
 }
 

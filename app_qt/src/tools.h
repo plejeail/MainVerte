@@ -16,9 +16,16 @@ public:
     {}
 
     ~Stopwatch() {
+        if (_title != nullptr) {
+            stop();
+        }
+    }
+
+    void stop() {
         const auto elapsed = std::chrono::duration<double, std::milli>(clock::now() - _start).count();
         assert(elapsed >= 0);
         qDebug() << _title << elapsed << "ms";
+        _title = nullptr;
     }
 
     Stopwatch(const Stopwatch&)            = delete;

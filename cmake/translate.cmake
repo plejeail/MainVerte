@@ -1,7 +1,7 @@
 # TARGET: existing target that consumes the generated header. Generation runs
 # before this target, and its private include paths include the output directory.
 # DESTINATION: header filename, relative to CMAKE_CURRENT_BINARY_DIR/generated.
-# DICTIONARIES: ordered list of MainVerte_<language>.dict files, relative to
+# DICTIONARIES: ordered list of <language>.dict files, relative to
 # CMAKE_CURRENT_SOURCE_DIR (absolute paths also work). The first dictionary
 # defines the text IDs and their order; all others must contain the same IDs.
 function(generate_translations)
