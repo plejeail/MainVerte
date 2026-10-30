@@ -81,14 +81,14 @@ class Stopwatch {
 
 public:
     explicit Stopwatch(const char* title)
-    : title(title)
-    , start(clock::now())
+    : _title(title)
+    , _start(clock::now())
     {}
 
     ~Stopwatch() {
-        const auto elapsed = std::chrono::duration<double, std::milli>(clock::now() - start).count();
+        const auto elapsed = std::chrono::duration<double, std::milli>(clock::now() - _start).count();
         assert(elapsed >= 0);
-        log_dbg("{} {}ms\n", title, elapsed);
+        log_dbg("{} {}ms", _title, elapsed);
     }
 
     Stopwatch(const Stopwatch&)            = delete;
@@ -97,8 +97,8 @@ public:
     Stopwatch& operator=(Stopwatch&&)      = delete;
 
 private:
-    const char*       title;
-    clock::time_point start;
+    const char*       _title;
+    clock::time_point _start;
 };
 
 #define MEASURE(title) Stopwatch stopwatch##__COUNTER__(title)

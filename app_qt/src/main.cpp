@@ -10,9 +10,11 @@
 #include <Qt>
 #include <QWindow>
 
+#include "app_settings.h"
 #include "mainverte_core.h"
-#include "widget_wizard_setup.h"
+#include "tools.h"
 #include "translator.h"
+#include "widget_wizard_setup.h"
 
 
 namespace {
@@ -21,10 +23,10 @@ void on_object_creation_failed() {
 }
 
 void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services);
-void load_traductions(const mv::Settings& settings);
 }
 
 int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
+    Stopwatch sw_app_init("app init");
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("MainVerte"));
 
@@ -36,25 +38,31 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     const QString database_path = QDir(data_directory).filePath(QStringLiteral("database.db"));
 
     mv::Services core_services;
-    if (!core_services.initialize(database_path.toUtf8().toStdString())) {
+    if (!core_services.initialize(database_path.toStdString())) {
         qCritical() << "Cannot initialize Core services with database:" << database_path;
         return EXIT_FAILURE;
     }
 
     auto settings = mv::settings();
 
-    load_traductions(settings);
+    ts::select_initial_language(settings.language);
     qInfo() << "ts selected language" << ts::current_language();
 
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app,    &on_object_creation_failed,
                      Qt::QueuedConnection);
+    auto* app_settings = new AppSettings(&engine);
+    QObject::connect(app_settings, &AppSettings::languageChanged,
+                     &engine,      &QQmlEngine::retranslate);
+    engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), app_settings);
     if (settings.current_gardener_id > 0) {
         engine.loadFromModule("MainVerte", "Main");
     } else {
         run_setup_wizard(engine, core_services);
     }
+
+    sw_app_init.~Stopwatch();
 
     return QGuiApplication::exec();
 }
@@ -62,6 +70,8 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
 namespace {
 void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services) {
     auto* setup_wizard = new SetupWizard(core_services, &engine);
+    QObject::connect(setup_wizard, &SetupWizard::languageChanged,
+                     &engine,      &QQmlEngine::retranslate);
     engine.rootContext()->setContextProperty(QStringLiteral("setupWizard"), setup_wizard);
     engine.loadFromModule("MainVerte", "SetupWindow");
     auto root_objects = engine.rootObjects();
@@ -100,17 +110,4 @@ void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services
     }
 }
 
-void load_traductions(const mv::Settings& settings) {
-    if (!settings.language.empty()) {
-        if (ts::select_language(settings.language)) {
-            return;
-        }
-
-        qWarning() << "failed to select registered language " << settings.language;
-    }
-
-    if (!ts::select_system_language()) {
-        qWarning() << "failed to select preferred language";
-    }
-}
 }

@@ -1,3 +1,4 @@
+// clazy:skip
 #include <chrono>
 #include <filesystem>
 #include <format>
@@ -98,7 +99,7 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
         "CREATE TRIGGER check_settings BEFORE INSERT ON gardener BEGIN "
         "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM settings WHERE current_gardener_id IS NULL "
         "AND current_collection_id=73) THEN RAISE(ABORT, 'settings not saved') END; END;") == SQLITE_OK);
-    REQUIRE(mv::save_settings({42, 999}));
+    REQUIRE(mv::save_settings({42, 999, "fr"}));
     REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
     deliver_completions();
     CHECK(mv::settings().current_gardener_id == 0);
@@ -284,7 +285,7 @@ TEST_CASE("Atomic gardener creation rolls back failures and allows retry with an
     // Restore a missing settings row, then check rollback before allowing a retry.
     REQUIRE(execute_on_worker(
         "DROP TRIGGER IF EXISTS reject_operation;"
-        "INSERT OR IGNORE INTO settings VALUES(1, 42, 73);"
+        "INSERT OR IGNORE INTO settings(id, current_gardener_id, current_collection_id, language) VALUES(1, 42, 73, 'fr');"
         "CREATE TRIGGER check_rollback BEFORE INSERT ON gardener BEGIN "
         "SELECT CASE WHEN (SELECT count(*) FROM gardener) != 1 "
         "OR NOT EXISTS(SELECT 1 FROM settings WHERE current_gardener_id=42 "
