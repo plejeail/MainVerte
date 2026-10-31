@@ -19,3 +19,5 @@ Settings_SaveFailed,No se han podido guardar los ajustes. Vuelve a intentarlo.
 Appearance_Title,Apariencia
 Theme_Light,Claro
 Theme_Dark,Oscuro
+Settings_SoftwareVersion,Versión del software: %1
+Settings_DatabaseVersion,Versión de la base de datos: %1

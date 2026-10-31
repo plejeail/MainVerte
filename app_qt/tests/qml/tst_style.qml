@@ -24,6 +24,21 @@ TestCase {
     Component { id: comboComponent; ComboBox { model: ["Fern", "Pilea", "Monstera"] } }
     Component { id: galleryComponent; Showcase { } }
     Component { id: mainComponent; App.Main { } }
+    Component { id: settingsComponent; App.SettingsPage { } }
+    Component {
+        id: debugSettingsComponent
+        QtObject {
+            property var languages: []
+            property int languageIndex: -1
+            property bool saving: false
+            property bool saveFailed: false
+            property bool darkTheme: false
+            property bool debugEnabled: false
+            property string softwareVersion: "0.1.0"
+            property int databaseVersion: 5
+            function selectDebugEnabled(enabled) { debugEnabled = enabled }
+        }
+    }
     Component { id: progressComponent; ProgressBar { width: 200; value: 0.6; indeterminate: true } }
     Component {
         id: modelViewsComponent
@@ -78,10 +93,46 @@ TestCase {
         window.close()
     }
 
+    function test_debug_version_clicks_data() {
+        return [{tag: "light"}, {tag: "dark", dark: true}, {tag: "large", scale: 1.5}]
+    }
+    function test_debug_version_clicks(data) {
+        MV.Tokens.dark = data.dark || false
+        MV.Tokens.fontScale = data.scale || 1
+        const settings = createTemporaryObject(debugSettingsComponent, testCase)
+        const page = createTemporaryObject(settingsComponent, testCase, {settings: settings, width: 390, height: 800})
+        verify(page)
+        const software = findChild(page, "softwareVersion")
+        const database = findChild(page, "databaseVersion")
+        const debug = findChild(page, "debugBox")
+        const checkbox = findChild(page, "debugEnabledCheckbox")
+        verify(software.text.indexOf("0.1.0") >= 0)
+        verify(database.text.indexOf("5") >= 0)
+        compare(debug.visible, false)
+        settings.saving = true
+        mouseClick(software)
+        compare(page.versionClicks, 0)
+        settings.saving = false
+        for (let click = 0; click < 4; ++click) {
+            mouseClick(click % 2 ? database : software)
+            compare(debug.visible, false)
+        }
+        mouseClick(database)
+        compare(debug.visible, true)
+        compare(checkbox.checked, true)
+        mouseClick(checkbox)
+        compare(settings.debugEnabled, false)
+        compare(debug.visible, false)
+        mouseClick(software)
+        compare(debug.visible, false)
+        compare(page.versionClicks, 1)
+    }
+
     function test_main_window_passes_settings_to_page() {
         const settings = {
             languageIndex: 0, languages: [{label: "English", flag: ""}],
             saving: false, darkTheme: false, saveFailed: false,
+            debugEnabled: false, softwareVersion: "0.1.0", databaseVersion: 5,
             selectLanguage: function(index) { settings.selectedLanguage = index },
             selectTheme: function(dark) { settings.selectedTheme = dark }
         }

@@ -13,6 +13,7 @@
 
 AppSettings::AppSettings(QObject* parent)
 : QObject(parent)
+, _debug_enabled(mv::settings().debug_enabled)
 , _dark_theme(mv::settings().dark_theme)
 {}
 
@@ -83,11 +84,18 @@ void AppSettings::selectLanguage(int index) {
 }
 
 void AppSettings::selectLogLevel(int index) {
+    if (_saving) {
+        return;
+    }
+
     const auto value = static_cast<mv::LogLevel>(index);
     assert(value >= mv::LogLevel::Dbg && value <= mv::LogLevel::Err);
 
     auto settings = mv::settings();
     settings.log_level = value;
+    _saving = true;
+    _save_failed = false;
+    emit stateChanged();
     const QPointer<AppSettings> receiver(this);
     mv::save_settings(settings, [receiver](bool saved) {
         if (!receiver) {
@@ -95,6 +103,40 @@ void AppSettings::selectLogLevel(int index) {
         }
         receiver->_saving = false;
         receiver->_save_failed = !saved;
+        emit receiver->stateChanged();
+    });
+}
+
+int AppSettings::databaseVersion() const {
+    return mv::database_version();
+}
+
+void AppSettings::selectDebugEnabled(bool enabled) {
+    if (_saving || enabled == _debug_enabled) {
+        return;
+    }
+
+    auto settings = mv::settings();
+    settings.debug_enabled = enabled;
+    _debug_enabled = enabled;
+    _saving = true;
+    _save_failed = false;
+    emit debugEnabledChanged();
+    emit stateChanged();
+
+    const QPointer<AppSettings> receiver(this);
+    mv::save_settings(settings, [receiver](bool saved) {
+        if (!receiver) {
+            return;
+        }
+
+        receiver->_saving = false;
+        receiver->_save_failed = !saved;
+        if (!saved) {
+            receiver->_debug_enabled = mv::settings().debug_enabled;
+            emit receiver->debugEnabledChanged();
+        }
+
         emit receiver->stateChanged();
     });
 }

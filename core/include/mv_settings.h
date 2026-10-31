@@ -23,6 +23,7 @@ struct Settings {
     static constexpr int64_t Undefined = 0;
 
     bool        dark_theme{false};
+    bool        debug_enabled{false};
     /// Minimum log severity.
     LogLevel    log_level{LogLevel::Inf};
     int64_t     current_gardener_id{Undefined};

@@ -98,3 +98,21 @@ TEST_CASE("Log level migration preserves settings and defaults to debug") {
         CHECK(sqlite3_exec(db.handle, sql, nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
     }
 }
+
+TEST_CASE("Debug migration preserves existing settings and defaults to disabled") {
+    TestDatabase db;
+    for (size_t index = 0; index < 4; ++index) {
+        REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[index], index + 1));
+    }
+
+    REQUIRE(sqlite3_exec(db.handle,
+        "UPDATE settings SET language='fr', dark_theme=1, log_level=2;",
+        nullptr, nullptr, nullptr) == SQLITE_OK);
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[4], 5));
+    CHECK(db.scalar("PRAGMA user_version") == 5);
+    CHECK(db.scalar("SELECT language='fr' AND dark_theme=1 AND log_level=2 AND debug_enabled=0 FROM settings") == 1);
+    for (const auto* sql : {"UPDATE settings SET debug_enabled=-1", "UPDATE settings SET debug_enabled=2",
+                            "UPDATE settings SET debug_enabled=NULL", "UPDATE settings SET debug_enabled=0.5"}) {
+        CHECK(sqlite3_exec(db.handle, sql, nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    }
+}
