@@ -3,7 +3,7 @@
 #include <cassert>
 #include <chrono>
 
-#include <QDebug>
+#include "mvlog/mvlog.h"
 
 
 class Stopwatch {
@@ -24,7 +24,7 @@ public:
     void stop() {
         const auto elapsed = std::chrono::duration<double, std::milli>(clock::now() - _start).count();
         assert(elapsed >= 0);
-        qDebug() << _title << elapsed << "ms";
+        mvlog::dbg("{} {}ms", _title, elapsed);
         _title = nullptr;
     }
 

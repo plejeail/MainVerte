@@ -76,6 +76,17 @@ The application stores its SQLite database as `database.db` in the directory
 returned by `QStandardPaths::AppLocalDataLocation`, using the application name
 `MainVerte`. This location is independent of the working and build directories.
 
+The logger writes `mainverte.log` in the same directory, with a 5 MiB rotation
+threshold and two archives (`mainverte.log.1` and `.2`). The oldest archive is
+discarded at the next rotation. Messages also go to stderr on desktop and Logcat
+(tag `MainVerte`) on Android. If file logging fails, console/Logcat output remains
+available.
+
+The `MV_LOG_ENABLE_DBG`, `MV_LOG_ENABLE_INF`, `MV_LOG_ENABLE_WRN`,
+`MV_LOG_ENABLE_ERR`, `MV_LOG_ENABLE_CONSOLE` and `MV_LOG_QT_TYPES_FORMAT` CMake
+options default to `ON`. `MV_LOG_DISABLED` and `MV_LOG_QT_DISABLE_QDEBUG` default
+to `OFF`; the latter undefines Qt logging macros to help locate remaining calls.
+
 - Windows: normally `%LOCALAPPDATA%\MainVerte\database.db`.
 - Android: `database.db` is stored in the app's private data directory, whose
   exact path is determined by Qt and the installed application package.

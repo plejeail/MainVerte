@@ -3,6 +3,7 @@
 #include <QDebug>
 #include <QPointer>
 
+#include "mvlog/mvlog.h"
 #include "translator.h"
 
 
@@ -87,7 +88,7 @@ void SetupWizard::createGardener(const QString& name) {
         }
 
         receiver->setBusy(false);
-        qWarning() << "Gardener creation failed:" << QString::fromStdString(result.error().message);
+        mvlog::wrn("Gardener creation failed: {}", result.error().message);
         if (result.error().code == mv::MainverteError::Code::NotRunning) {
             emit receiver->failed(ts::get(ts::TextId::Gardener_ServiceUnavailable));
         } else {

@@ -16,6 +16,7 @@ Checks: >
   modernize-*,
   -modernize-use-scoped-lock,
   -modernize-use-trailing-return-type,
+  -modernize-macro-to-enum,
   portability-simd-intrinsics
 
 WarningsAsErrors: ''

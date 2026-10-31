@@ -15,13 +15,14 @@
 #include <QWindow>
 
 #include "app_settings.h"
+#include "mvlog/mvlog.h"
 #include "mainverte_core.h"
 #include "tools.h"
 #include "translator.h"
 #include "widget_wizard_setup.h"
 
 #ifdef Q_OS_ANDROID
-#include "setup_system_bars.android.h"
+#include "widget_system_bars.android.h"
 #endif
 
 
@@ -40,6 +41,24 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     Stopwatch sw_app_init("app init");
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("MainVerte"));
+
+    const QString data_directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    if (data_directory.isEmpty()) {
+        mvlog::err("Cannot determine the application data directory.");
+        return EXIT_FAILURE;
+    }
+
+    const QString log_path = QDir(data_directory).filePath(QStringLiteral("mainverte.log"));
+    if (!QDir().mkpath(data_directory)) {
+        mvlog::err("Cannot create the application data directory {}", data_directory);
+    } else {
+        const auto log_path_utf8 = log_path.toUtf8();
+        // 5 MiB per file, plus two archives (.1 and .2).
+        if (mvlog::init(log_path_utf8.constData(), 5LL * 1024, 2) != mvlog::InitResult::Ok) {
+            mvlog::err("Cannot initialize file logging at {}; console logging active.", log_path);
+        }
+    }
+
     QGuiApplication::setWindowIcon(QIcon(QStringLiteral(":/img/logo_mainverte.png")));
     QQuickStyle::setStyle(QStringLiteral("MainVerteStyle"));
     QQuickStyle::setFallbackStyle(QStringLiteral("Basic"));
@@ -53,23 +72,18 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
         return QGuiApplication::exec();
     }
 
-    const QString data_directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    if (data_directory.isEmpty()) {
-        qCritical() << "Cannot determine the application data directory.";
-        return EXIT_FAILURE;
-    }
     const QString database_path = QDir(data_directory).filePath(QStringLiteral("database.db"));
 
     mv::Services core_services;
     if (!core_services.initialize(database_path.toStdString())) {
-        qCritical() << "Cannot initialize Core services with database:" << database_path;
+        mvlog::err("Cannot initialize Core services with database: {}", database_path);
         return EXIT_FAILURE;
     }
 
     auto settings = mv::settings();
 
     ts::select_initial_language(settings.language);
-    qInfo() << "ts selected language" << ts::current_language();
+    mvlog::inf("ts language selected: {}", ts::current_language());
 
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
@@ -81,9 +95,10 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), app_settings);
     auto* tokens = engine.singletonInstance<QObject*>("MainVerteStyle", "Tokens");
     if (tokens == nullptr) {
-        qCritical() << "Cannot load style tokens.";
+        mvlog::err("Cannot load style tokens.");
         return EXIT_FAILURE;
     }
+
     tokens->setProperty("dark", app_settings->darkTheme());
     QObject::connect(app_settings, &AppSettings::themeChanged, tokens, [tokens, app_settings] {
         tokens->setProperty("dark", app_settings->darkTheme());
@@ -93,6 +108,7 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     } else {
         run_setup_wizard(engine, core_services);
     }
+
 #ifdef Q_OS_ANDROID
     const auto roots = engine.rootObjects();
     auto* setup_window = settings.current_gardener_id <= 0 && !roots.isEmpty()
@@ -122,6 +138,7 @@ void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services
             if (!wizard || roots.size() <= previous_roots.size()) {
                 return;
             }
+
             auto* main_window = qobject_cast<QWindow*>(roots.last());
             if (main_window == nullptr) {
                 return;

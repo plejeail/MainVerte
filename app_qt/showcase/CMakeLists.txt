@@ -1,4 +1,9 @@
 qt_add_library(mainverte_showcase STATIC)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_target_properties(mainverte_showcase PROPERTIES
+        QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode"
+    )
+endif()
 qt_add_qml_module(mainverte_showcase
     URI MainVerte.Showcase
     CLASS_NAME MainVerteShowcasePlugin

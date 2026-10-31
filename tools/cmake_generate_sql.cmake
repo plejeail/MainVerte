@@ -47,7 +47,7 @@ function(generate_sql_resource)
 
 
     configure_file(
-        "${PROJECT_SOURCE_DIR}/cmake/sql_template.hpp.in"
+        "${PROJECT_SOURCE_DIR}/tools/sql_template.hpp.in"
         "${arg_OUTPUT_HEADER}"
         @ONLY
     )

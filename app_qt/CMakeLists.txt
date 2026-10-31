@@ -1,17 +1,19 @@
 find_package(Qt6 REQUIRED COMPONENTS Quick QuickControls2)
 
-include("${PROJECT_SOURCE_DIR}/cmake/translate.cmake")
+include("${PROJECT_SOURCE_DIR}/tools/translate.cmake")
 
 qt_standard_project_setup(REQUIRES 6.12)
 set(QT_QML_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml")
 
 add_subdirectory(style)
 add_subdirectory(showcase)
+add_subdirectory(src/mvlog)
 
 file(GLOB_RECURSE APP_CPP_FILES CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
 )
+list(FILTER APP_CPP_FILES EXCLUDE REGEX "/mvlog/.*[.]cpp$")
 
 file(GLOB_RECURSE APP_QML_FILES CONFIGURE_DEPENDS
         RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -42,6 +44,16 @@ endforeach()
 
 qt_add_executable(appMainVerte
     ${APP_CPP_FILES}
+)
+
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_target_properties(appMainVerte PROPERTIES
+        QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode"
+    )
+endif()
+
+target_precompile_headers(appMainVerte PRIVATE
+    "$<$<COMPILE_LANGUAGE:CXX>:${CMAKE_CURRENT_SOURCE_DIR}/src/pch.h>"
 )
 
 if(WIN32)
@@ -99,6 +111,7 @@ target_link_libraries(appMainVerte
     mainverte_showcaseplugin
 
     mainverte_core
+    mainverte_mvlog
     project_warnings
 )
 
@@ -124,7 +137,7 @@ if(BUILD_TESTING)
         img/flag_en.svg img/flag_fr.svg img/flag_de.svg img/flag_es.svg)
     target_include_directories(mainverte_setup_tests PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
     add_dependencies(mainverte_setup_tests appMainVerte)
-    target_link_libraries(mainverte_setup_tests PRIVATE Qt6::Quick mainverte_core doctest::doctest project_warnings)
+    target_link_libraries(mainverte_setup_tests PRIVATE Qt6::Quick mainverte_core mainverte_mvlog doctest::doctest project_warnings)
     foreach(locale IN ITEMS fr_FR en_GB de_DE es_ES)
         add_test(NAME setup_language_${locale} COMMAND mainverte_setup_tests)
         set_tests_properties(setup_language_${locale} PROPERTIES

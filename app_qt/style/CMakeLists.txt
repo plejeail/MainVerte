@@ -1,4 +1,9 @@
 qt_add_library(mainverte_style STATIC)
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    set_target_properties(mainverte_style PROPERTIES
+        QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode"
+    )
+endif()
 set_source_files_properties(Tokens.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 qt_add_qml_module(mainverte_style
     URI MainVerteStyle

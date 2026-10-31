@@ -8,6 +8,7 @@
 #include <QVariantMap>
 
 #include "generated_translations.hpp"
+#include "mvlog/mvlog.h"
 
 
 namespace {
@@ -59,7 +60,7 @@ int ts::language_index() {
 bool ts::select_language(std::string_view lang) {
     for (const auto& candidate : mv::i18n::languages) {
         if (candidate.code == lang) {
-            qInfo() << "ts selected language" << candidate.code;
+            mvlog::inf("ts selected language {}", candidate.code);
             selected_language = candidate;
             return true;
         }
@@ -88,7 +89,7 @@ void ts::select_initial_language(std::string_view saved_language) {
             return;
         }
 
-        qWarning() << "failed to select registered language" << saved_language;
+        mvlog::wrn("failed to select registered language {}", saved_language);
     }
 
     select_system_language();
