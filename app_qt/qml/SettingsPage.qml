@@ -117,21 +117,29 @@ Page {
             title: "-- DEBUG OPTIONS --"
             visible: true
 
-            Label {
-                font.bold: true
-                text: "Log level"
-            }
+            ColumnLayout {
+                anchors.left: parent.left
+                anchors.margins: 0
+                anchors.right: parent.right
+                anchors.top: parent.top
+                spacing: 12
 
-            ComboBox {
-                Accessible.name: "log level"
-                Layout.fillWidth: true
-                Layout.maximumWidth: 360
-                currentIndex: 0
-                enabled: !settingsPage.settings.saving
-                model: ["Debug", "Info", "Warning", "Error"]
-                objectName: "logSelector"
+                Label {
+                    font.bold: true
+                    text: "Log level"
+                }
 
-                onActivated: index => settingsPage.settings.selectLogLevel(index)
+                ComboBox {
+                    Accessible.name: "log level"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: 360
+                    currentIndex: 0
+                    enabled: !settingsPage.settings.saving
+                    model: ["Debug", "Info", "Warning", "Error"]
+                    objectName: "logSelector"
+
+                    onActivated: index => settingsPage.settings.selectLogLevel(index)
+                }
             }
         }
     }
