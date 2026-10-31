@@ -57,6 +57,26 @@ build directories for each platform, compiler and Android ABI; never reuse a
 CMake cache across kits. The application target is `appMainVerte`; the Core
 library target is `mainverte_core`.
 
+On Windows, ensure the Qt kit's `bin` directory and the matching compiler's
+runtime directory are in `Path`. If CTest fails before the tests start with
+`0xc0000135`, check for inherited entries named both `PATH` and `Path`: CTest
+can retain the entry without the required DLL directories. Normalize them in
+the current PowerShell session after configuring the runtime directories:
+
+```powershell
+$runtimePath = $env:PATH
+Remove-Item Env:PATH -ErrorAction SilentlyContinue
+Remove-Item Env:Path -ErrorAction SilentlyContinue
+$env:Path = $runtimePath
+```
+
+For offscreen UI tests on Windows, point Qt to the system fonts if it reports
+that the kit's `lib/fonts` directory is missing:
+
+```powershell
+$env:QT_QPA_FONTDIR = Join-Path $env:WINDIR "Fonts"
+```
+
 To build and run on Android, open the root `CMakeLists.txt` in Qt Creator, select
 the Android kit and ABI, and use a separate build directory (for example,
 `build/android-arm64`). Build `appMainVerte` and run it on a matching device or

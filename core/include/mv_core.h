@@ -1,4 +1,4 @@
-// include/core.h -------------------------------------------------------------
+// include/mv_core.h ----------------------------------------------------------
 // MAINVERTE_CORE MAIN HEADER
 //
 // The consuming application implements mv::platform functions and owns the

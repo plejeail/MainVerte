@@ -59,7 +59,7 @@ TestCase {
     function cleanup() { MV.Tokens.dark = false; MV.Tokens.fontScale = 1 }
 
     function test_main_window_resize() {
-        const window = createTemporaryObject(mainComponent, null)
+        const window = createTemporaryObject(mainComponent, null, {settings: {}})
         verify(window)
         tryCompare(window, "visible", true)
         if (!MV.Tokens.touch) {
@@ -75,6 +75,28 @@ TestCase {
             compare(window.height, 700)
             compare(window.desktopNavigation, width >= MV.Tokens.compactBreakpoint)
         }
+        window.close()
+    }
+
+    function test_main_window_passes_settings_to_page() {
+        const settings = {
+            languageIndex: 0, languages: [{label: "English", flag: ""}],
+            saving: false, darkTheme: false, saveFailed: false,
+            selectLanguage: function(index) { settings.selectedLanguage = index },
+            selectTheme: function(dark) { settings.selectedTheme = dark }
+        }
+        const window = createTemporaryObject(mainComponent, null, {settings: settings})
+        verify(window)
+        window.showSection(1)
+        const language = findChild(window, "languageSelector")
+        verify(language)
+        compare(language.currentIndex, 0)
+        language.activated(0)
+        compare(settings.selectedLanguage, 0)
+        const theme = findChild(window, "themeSelector")
+        verify(theme)
+        theme.activated(1)
+        compare(settings.selectedTheme, true)
         window.close()
     }
 

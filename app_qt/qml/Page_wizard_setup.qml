@@ -1,8 +1,12 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 
 Page {
     id: window
+
+    required property var wizard
 
     property string errorMessage: ""
 
@@ -12,10 +16,10 @@ Page {
     }
 
     function submit() {
-        if (setupWizard.busy || nameField.text.trim().length === 0)
+        if (window.wizard.busy || nameField.text.trim().length === 0)
             return;
         window.errorMessage = "";
-        setupWizard.createGardener(nameField.text);
+        window.wizard.createGardener(nameField.text);
     }
 
     implicitHeight: form.implicitHeight + 96
@@ -26,7 +30,7 @@ Page {
             window.errorMessage = message;
         }
 
-        target: setupWizard
+        target: window.wizard
     }
 
     Rectangle {
@@ -172,7 +176,7 @@ Page {
 
                         Accessible.name: Ts.get(TextId.Gardener_NameLabel)
                         color: "#F2FFE9"
-                        enabled: !setupWizard.busy
+                        enabled: !window.wizard.busy
                         font.pixelSize: 17
                         height: 58
                         leftPadding: 18
@@ -205,11 +209,12 @@ Page {
                     ComboBox {
                         id: languageBox
 
+                        objectName: "languageSelector"
                         Accessible.name: Ts.get(TextId.Gardener_LanguageLabel)
-                        model: setupWizard.languages
+                        model: window.wizard.languages
                         textRole: "label"
-                        currentIndex: setupWizard.languageIndex
-                        enabled: !setupWizard.busy
+                        currentIndex: window.wizard.languageIndex
+                        enabled: !window.wizard.busy
                         width: parent.width
                         height: 58
                         leftPadding: 14
@@ -237,6 +242,8 @@ Page {
                             }
                         }
                         delegate: ItemDelegate {
+                            id: languageDelegate
+
                             required property var modelData
                             required property int index
                             width: languageBox.width
@@ -244,24 +251,24 @@ Page {
                             contentItem: Row {
                                 spacing: 12
                                 Image {
-                                    source: modelData.flag
+                                    source: languageDelegate.modelData.flag
                                     width: 28
                                     height: 24
                                     fillMode: Image.PreserveAspectFit
                                 }
                                 Text {
-                                    text: modelData.label
+                                    text: languageDelegate.modelData.label
                                     color: "#F2FFE9"
                                     font.pixelSize: 17
                                 }
                             }
                             background: Rectangle {
-                                color: parent.highlighted ? "#477B5B" : "#0D382B"
+                                color: languageDelegate.highlighted ? "#477B5B" : "#0D382B"
                             }
                         }
                         onActivated: index => {
                             window.errorMessage = "";
-                            setupWizard.selectLanguage(index);
+                            window.wizard.selectLanguage(index);
                         }
                     }
 
@@ -277,7 +284,7 @@ Page {
                     Button {
                         id: submitButton
 
-                        enabled: (!setupWizard.busy && nameField.text.trim().length > 0)
+                        enabled: (!window.wizard.busy && nameField.text.trim().length > 0)
                         height: 56
                         width: parent.width
 
@@ -292,7 +299,7 @@ Page {
                             font.bold: true
                             font.pixelSize: 16
                             horizontalAlignment: Text.AlignHCenter
-                            text: setupWizard.busy ? Ts.get(TextId.Gardener_Busy) : Ts.get(TextId.Gardener_Create)
+                            text: window.wizard.busy ? Ts.get(TextId.Gardener_Busy) : Ts.get(TextId.Gardener_Create)
                             verticalAlignment: Text.AlignVCenter
                         }
 

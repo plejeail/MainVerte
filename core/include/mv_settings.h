@@ -1,3 +1,9 @@
+// include/mv_settings.h ------------------------------------------------------
+// MAINVERTE_CORE SETTINGS
+//
+// Define the core settings data structure.
+//
+//-------------------------------------------------------------- mainverte/core
 #pragma once
 
 #include <cstdint>
@@ -6,15 +12,22 @@
 
 namespace mv {
 
-enum class LogLevel : int8_t;
+enum class LogLevel : int8_t;  // Values are defined in mv_core.h.
 
+/// Owned snapshot returned by settings(); changing it does not update Core.
+/// Submit the modified snapshot with save_settings() and observe completion
+/// before assuming persistence succeeded. Access rules are documented in mv_core.h.
 struct Settings {
+    /// No selected object; stored as SQL NULL for selection fields.
     static constexpr int64_t Undefined = 0;
 
     bool        dark_theme{false};
+    /// Currently cached in memory only, not persisted; defaults to LogLevel::Dbg.
     LogLevel    log_level{};
     int64_t     current_gardener_id{Undefined};
     int64_t     current_collection_id{Undefined};
+    /// Preferred language code (for example, "fr"); empty means system preference.
+    /// The application resolves supported languages and fallback behavior.
     std::string language;
 };
 

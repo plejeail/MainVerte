@@ -1,3 +1,5 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -5,6 +7,8 @@ import MainVerteStyle as MV
 
 ApplicationWindow {
     id: window
+
+    required property var settings
 
     property int currentSection: 0
     readonly property bool desktopNavigation: width >= MV.Tokens.compactBreakpoint
@@ -123,6 +127,7 @@ ApplicationWindow {
         id: settingsPage
 
         SettingsPage {
+            settings: window.settings
         }
     }
 }

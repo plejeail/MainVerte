@@ -1,9 +1,37 @@
-// Android NDK <= 29 does not support std::move_only_function
+// include/mv_move_only_function.h --------------------------------------------
+// MAINVERTE_CORE MOVE ONLY FUNCTIONS
+//
+// Owning callable wrapper for jobs and callbacks with non-copyable captures.
+// Uses std::move_only_function when available, otherwise a compatibility fallback
+// for standard libraries such as those supplied by Android NDK <= 29.
+//
+// Use unqualified Result(Args...) signatures for portability across both versions.
+// Default construction and nullptr produce an empty wrapper; check operator bool
+// before invocation if emptiness is possible. Invoking an empty wrapper is invalid.
+// Moving transfers the target's ownership; invocation does not consume the target.
+// Reference captures remain borrowed: their referents must outlive all uses.
+// The wrapper itself provides no thread dispatch or synchronization.
+//
+//-------------------------------------------------------------- mainverte/core
 #pragma once
+
+#include <functional>
+
+
+#if defined(__cpp_lib_move_only_function) && __cpp_lib_move_only_function >= 202110L
+
+namespace mv {
+
+/// Standard implementation of the owning, move-only callable wrapper.
+template<typename Signature>
+using MoveOnlyFunction = std::move_only_function<Signature>;
+
+}  // namespace mv
+
+#else
 
 #include <cassert>
 #include <cstddef>
-#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
@@ -11,9 +39,8 @@
 
 namespace mv {
 
-// Owning callable for jobs and continuations, including non-copyable captures.
-// One allocation per nonempty target; moving transfers ownership without allocation.
-// Supports unqualified signatures only. Calling an empty function is invalid.
+/// Compatibility implementation; one allocation per nonempty target.
+/// Moves transfer ownership without allocation. Only unqualified signatures work.
 template<typename Signature>
 class MoveOnlyFunction;
 
@@ -82,4 +109,6 @@ private:
     std::unique_ptr<Target> target;
 };
 
-} // namespace mv
+}  // namespace mv
+
+#endif  // support move_only_function

@@ -8,9 +8,9 @@
 #include <QObject>
 #include <QPointer>
 #include <QQmlApplicationEngine>
-#include <QQmlContext>
 #include <QQuickStyle>
 #include <QStandardPaths>
+#include <QVariant>
 #include <QWindow>
 #include <Qt>
 #include <QtQml/QQmlExtensionPlugin>
@@ -36,7 +36,7 @@ void on_object_creation_failed() {
     QCoreApplication::exit(-1);
 }
 
-void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services);
+void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services, AppSettings& app_settings);
 
 }  // namespace
 
@@ -95,7 +95,7 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     auto* app_settings = new AppSettings(&engine);
     QObject::connect(app_settings, &AppSettings::languageChanged,
                      &engine,      &QQmlEngine::retranslate);
-    engine.rootContext()->setContextProperty(QStringLiteral("appSettings"), app_settings);
+    engine.setInitialProperties({{QStringLiteral("settings"), QVariant::fromValue(app_settings)}});
     auto* tokens = engine.singletonInstance<QObject*>("MainVerteStyle", "Tokens");
     if (tokens == nullptr) {
         mvlog::err("Cannot load style tokens.");
@@ -109,7 +109,7 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     if (settings.current_gardener_id > 0) {
         engine.loadFromModule("MainVerte", "Main");
     } else {
-        run_setup_wizard(engine, core_services);
+        run_setup_wizard(engine, core_services, *app_settings);
     }
 
 #ifdef Q_OS_ANDROID
@@ -126,17 +126,18 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
 
 namespace {
 
-void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services) {
+void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services, AppSettings& app_settings) {
     auto* setup_wizard = new SetupWizard(core_services, &engine);
     QObject::connect(setup_wizard, &SetupWizard::languageChanged,
                      &engine,      &QQmlEngine::retranslate);
-    engine.rootContext()->setContextProperty(QStringLiteral("setupWizard"), setup_wizard);
+    engine.setInitialProperties({{QStringLiteral("wizard"), QVariant::fromValue(setup_wizard)}});
     engine.loadFromModule("MainVerte", "SetupWindow");
     auto root_objects = engine.rootObjects();
     if (!root_objects.isEmpty()) {
         const QPointer<QWindow> wizard = qobject_cast<QWindow*>(root_objects.first());
-        QObject::connect(setup_wizard, &SetupWizard::created, &engine, [&engine, wizard] {
+        QObject::connect(setup_wizard, &SetupWizard::created, &engine, [&engine, &app_settings, wizard] {
             const auto previous_roots = engine.rootObjects();
+            engine.setInitialProperties({{QStringLiteral("settings"), QVariant::fromValue(&app_settings)}});
             engine.loadFromModule("MainVerte", "Main");
             const auto roots = engine.rootObjects();
             if (!wizard || roots.size() <= previous_roots.size()) {

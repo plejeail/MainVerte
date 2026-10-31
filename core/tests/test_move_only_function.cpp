@@ -8,6 +8,10 @@
 #include "mv_move_only_function.h"
 
 
+#if defined(__cpp_lib_move_only_function) && __cpp_lib_move_only_function >= 202110L
+static_assert(std::is_same_v<mv::MoveOnlyFunction<void()>, std::move_only_function<void()>>);
+#endif
+
 static_assert(!std::is_copy_constructible_v<mv::MoveOnlyFunction<void()>>);
 static_assert(!std::is_copy_assignable_v<mv::MoveOnlyFunction<void()>>);
 static_assert(std::is_nothrow_move_constructible_v<mv::MoveOnlyFunction<void()>>);
@@ -29,7 +33,6 @@ TEST_CASE("MoveOnlyFunction moves a mutable non-copyable capture") {
         return *value += increment;
     };
     auto destination = std::move(source);
-    CHECK_FALSE(source);
     REQUIRE(destination);
     CHECK(destination(2) == 12);
     CHECK(destination(3) == 15);
@@ -59,7 +62,6 @@ TEST_CASE("MoveOnlyFunction releases replaced and reset captures exactly once") 
             [owned = std::unique_ptr<int, CountDeletion>(new int(2), CountDeletion{&deleted})] {};
         first = std::move(second);
         CHECK(deleted == 1);
-        CHECK_FALSE(second);
         first = nullptr;
         CHECK(deleted == 2);
         CHECK_FALSE(first);

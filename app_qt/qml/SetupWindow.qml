@@ -4,6 +4,8 @@ import QtQuick.Controls
 ApplicationWindow {
     id: window
 
+    required property var wizard
+
     title: Ts.get(TextId.App_Title)
     flags: Qt.platform.os === "android" ? Qt.Window | Qt.ExpandedClientAreaHint : Qt.Window
     color: "#143F2C"
@@ -48,5 +50,6 @@ ApplicationWindow {
         id: setupPage
 
         anchors.fill: parent
+        wizard: window.wizard
     }
 }

@@ -1,21 +1,21 @@
 // clazy:skip
 #define DOCTEST_CONFIG_IMPLEMENT
+#include <QDir>
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
-#include <QDir>
-#include <QLocale>
 #include <QGuiApplication>
+#include <QLocale>
 #include <QQmlApplicationEngine>
-#include <QQmlContext>
 #include <QQmlComponent>
 #include <QTemporaryDir>
 #include <QTimer>
+#include <QVariant>
 
 #include <doctest.h>
 
-#include "translator.h"
 #include "app_settings.h"
+#include "translator.h"
 #include "widget_wizard_setup.h"
 
 
@@ -212,12 +212,12 @@ TEST_CASE("settings page exposes the language selector and retranslates after ac
     ts::select_language("en");
     AppSettings settings;
     QQmlEngine engine;
-    engine.rootContext()->setContextProperty("appSettings", &settings);
     QObject::connect(&settings, &AppSettings::languageChanged, &engine, &QQmlEngine::retranslate);
     QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
     REQUIRE(source.open(QIODevice::ReadOnly));
     QQmlComponent component(&engine);
-    component.setData("import WizardTest\n" + source.readAll(), QUrl());
+    component.setData(source.readAll().replace("import QtQuick\r\n", "import QtQuick\n")
+                          .replace("import QtQuick\n", "import WizardTest\nimport QtQuick\n"), QUrl());
     if (component.isLoading()) {
         QEventLoop loading;
         QObject::connect(&component, &QQmlComponent::statusChanged, &loading, &QEventLoop::quit);
@@ -225,7 +225,7 @@ TEST_CASE("settings page exposes the language selector and retranslates after ac
         loading.exec();
     }
     REQUIRE_MESSAGE(component.isReady(), component.errorString().toStdString());
-    std::unique_ptr<QObject> page(component.create());
+    std::unique_ptr<QObject> page(component.createWithInitialProperties({{"settings", QVariant::fromValue(&settings)}}));
     REQUIRE(page);
     CHECK(page->property("title").toString() == "Parameters");
     auto* selector = page->findChild<QObject*>("languageSelector");
@@ -255,6 +255,39 @@ TEST_CASE("settings page exposes the language selector and retranslates after ac
     CHECK_FALSE(settings.saveFailed());
     CHECK(mv::settings().dark_theme);
     CHECK(mv::settings().language == "fr");
+}
+
+TEST_CASE("setup page uses its injected wizard for language selection and errors") {
+    mv::Services services;
+    REQUIRE(services.initialize(":memory:"));
+    ts::select_language("en");
+    SetupWizard wizard(services);
+    QQmlEngine engine;
+    QObject::connect(&wizard, &SetupWizard::languageChanged, &engine, &QQmlEngine::retranslate);
+    QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/Page_wizard_setup.qml"));
+    REQUIRE(source.open(QIODevice::ReadOnly));
+    QQmlComponent component(&engine);
+    component.setData(source.readAll().replace("import QtQuick\r\n", "import QtQuick\n")
+                          .replace("import QtQuick\n", "import WizardTest\nimport QtQuick\n"), QUrl());
+    if (component.isLoading()) {
+        QEventLoop loading;
+        QObject::connect(&component, &QQmlComponent::statusChanged, &loading, &QEventLoop::quit);
+        QTimer::singleShot(5000, &loading, &QEventLoop::quit);
+        loading.exec();
+    }
+
+    REQUIRE_MESSAGE(component.isReady(), component.errorString().toStdString());
+    std::unique_ptr<QObject> page(component.createWithInitialProperties({{"wizard", QVariant::fromValue(&wizard)}}));
+    REQUIRE(page);
+    auto* selector = page->findChild<QObject*>("languageSelector");
+    REQUIRE(selector);
+    CHECK(selector->property("currentIndex").toInt() == 0);
+    REQUIRE(QMetaObject::invokeMethod(selector, "activated", Q_ARG(int, 1)));
+    CHECK(wizard.languageIndex() == 1);
+    CHECK(selector->property("currentIndex").toInt() == 1);
+    CHECK(mv::settings().language.empty());
+    wizard.createGardener("");
+    CHECK(page->property("errorMessage").toString() == ts::get(ts::TextId::Gardener_NameRequired));
 }
 
 TEST_CASE("theme applies immediately and persists across restarts without changing language") {

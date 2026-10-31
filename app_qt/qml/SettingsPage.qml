@@ -1,8 +1,14 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
 Page {
+    id: settingsPage
+
+    required property var settings
+
     title: Ts.get(TextId.Parameters_Title)
 
     ColumnLayout {
@@ -23,10 +29,10 @@ Page {
             Accessible.name: Ts.get(TextId.Settings_LanguageLabel)
             Layout.fillWidth: true
             Layout.maximumWidth: 360
-            currentIndex: appSettings.languageIndex
-            enabled: !appSettings.saving
+            currentIndex: settingsPage.settings.languageIndex
+            enabled: !settingsPage.settings.saving
             leftPadding: 12
-            model: appSettings.languages
+            model: settingsPage.settings.languages
             objectName: "languageSelector"
             rightPadding: 32
             textRole: "label"
@@ -50,6 +56,8 @@ Page {
                 }
             }
             delegate: ItemDelegate {
+                id: languageDelegate
+
                 required property int index
                 required property var modelData
 
@@ -62,19 +70,19 @@ Page {
                     Image {
                         fillMode: Image.PreserveAspectFit
                         height: 24
-                        source: modelData.flag
+                        source: languageDelegate.modelData.flag
                         width: 28
                     }
 
                     Text {
                         color: languageBox.palette.text
                         font: languageBox.font
-                        text: modelData.label
+                        text: languageDelegate.modelData.label
                     }
                 }
             }
 
-            onActivated: index => appSettings.selectLanguage(index)
+            onActivated: index => settingsPage.settings.selectLanguage(index)
         }
 
         Label {
@@ -86,19 +94,19 @@ Page {
             Accessible.name: Ts.get(TextId.Appearance_Title)
             Layout.fillWidth: true
             Layout.maximumWidth: 360
-            currentIndex: appSettings.darkTheme ? 1 : 0
-            enabled: !appSettings.saving
+            currentIndex: settingsPage.settings.darkTheme ? 1 : 0
+            enabled: !settingsPage.settings.saving
             model: [Ts.get(TextId.Theme_Light), Ts.get(TextId.Theme_Dark)]
             objectName: "themeSelector"
 
-            onActivated: index => appSettings.selectTheme(index === 1)
+            onActivated: index => settingsPage.settings.selectTheme(index === 1)
         }
 
         Label {
             Layout.fillWidth: true
             color: "#B3261E"
             text: Ts.get(TextId.Settings_SaveFailed)
-            visible: appSettings.saveFailed
+            visible: settingsPage.settings.saveFailed
             wrapMode: Text.WordWrap
         }
 
@@ -119,11 +127,11 @@ Page {
                 Layout.fillWidth: true
                 Layout.maximumWidth: 360
                 currentIndex: 0
-                enabled: !appSettings.saving
+                enabled: !settingsPage.settings.saving
                 model: ["Debug", "Info", "Warning", "Error"]
                 objectName: "logSelector"
 
-                onActivated: index => appSettings.selectLogLevel(index)
+                onActivated: index => settingsPage.settings.selectLogLevel(index)
             }
         }
     }
