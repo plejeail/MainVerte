@@ -12,7 +12,8 @@
 
 namespace mv {
 
-enum class LogLevel : int8_t;  // Values are defined in mv_core.h.
+/// Severity of a message emitted through platform::log().
+enum class LogLevel : int8_t { Dbg, Inf, Wrn, Err, };
 
 /// Owned snapshot returned by settings(); changing it does not update Core.
 /// Submit the modified snapshot with save_settings() and observe completion
@@ -22,8 +23,8 @@ struct Settings {
     static constexpr int64_t Undefined = 0;
 
     bool        dark_theme{false};
-    /// Currently cached in memory only, not persisted; defaults to LogLevel::Dbg.
-    LogLevel    log_level{};
+    /// Minimum log severity.
+    LogLevel    log_level{LogLevel::Inf};
     int64_t     current_gardener_id{Undefined};
     int64_t     current_collection_id{Undefined};
     /// Preferred language code (for example, "fr"); empty means system preference.

@@ -7,7 +7,6 @@
 //-------------------------------------------------------------- mainverte/core
 #pragma once
 
-#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -16,13 +15,9 @@
 #include "mv_settings.h"
 
 
-namespace mv {
-
-/// Severity of a message emitted through platform::log().
-enum class LogLevel : int8_t { Dbg, Inf, Wrn, Err, };
-
 /// Platform-specific facilities supplied by the application.
-namespace platform {
+namespace mv::platform {
+
 /// Sends a message to the application's logging facility.
 ///
 /// The application provides the definition for each target platform. The
@@ -47,7 +42,10 @@ void log(LogLevel severity, std::string_view msg);
 /// Callback captures must remain valid until execution or destruction; consumers
 /// must protect references to objects that may disappear before delivery.
 void dispatch_callback(MoveOnlyFunction<void()> callback);
-};
+
+}  // mv::platform
+
+namespace mv {
 
 /// Controls the lifetime of Core services on behalf of the application.
 ///

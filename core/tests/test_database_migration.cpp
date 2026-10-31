@@ -1,4 +1,7 @@
 // clazy:skip
+#include <cstddef>
+#include <initializer_list>
+
 #include <doctest.h>
 #include <sqlite3.h>
 
@@ -72,4 +75,26 @@ TEST_CASE("Theme migration preserves existing settings and defaults to light") {
     CHECK(db.scalar("SELECT language='fr' FROM settings") == 1);
     CHECK(db.scalar("SELECT dark_theme FROM settings") == 0);
     CHECK(sqlite3_exec(db.handle, "UPDATE settings SET dark_theme=2", nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+}
+
+TEST_CASE("Log level migration preserves settings and defaults to debug") {
+    TestDatabase db;
+    for (size_t index = 0; index < 3; ++index) {
+        REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[index], index + 1));
+    }
+
+    REQUIRE(sqlite3_exec(db.handle,
+        "INSERT INTO gardener VALUES(7, 'Camille', 0);"
+        "INSERT INTO collection VALUES(9, 7, 'Garden', 0, 0);"
+        "UPDATE settings SET current_gardener_id=7, current_collection_id=9, language='fr', dark_theme=1;",
+        nullptr, nullptr, nullptr) == SQLITE_OK);
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[3], 4));
+    CHECK(db.scalar("PRAGMA user_version") == 4);
+    CHECK(db.scalar("SELECT current_gardener_id=7 AND current_collection_id=9 "
+                    "AND language='fr' AND dark_theme=1 AND log_level=0 FROM settings") == 1);
+    CHECK(db.scalar("SELECT count(*) FROM gardener WHERE display_name='Camille'") == 1);
+    for (const auto* sql : {"UPDATE settings SET log_level=-1", "UPDATE settings SET log_level=4",
+                            "UPDATE settings SET log_level=NULL", "UPDATE settings SET log_level=1.5"}) {
+        CHECK(sqlite3_exec(db.handle, sql, nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    }
 }
