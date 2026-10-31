@@ -420,7 +420,7 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
 std::optional<mv::Settings> Database::read_settings() {
     static constexpr const char* sql =
         "SELECT (SELECT id FROM gardener WHERE id = current_gardener_id AND id > 0), "
-        "current_collection_id, language, dark_theme FROM settings WHERE id = 1";
+        "current_collection_id, language, dark_theme, log_level FROM settings WHERE id = 1";
     auto fail = [this]() -> std::optional<mv::Settings> {
         log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}", sqlite3_errmsg(_handle));
         if (_statement_read_settings) {
@@ -474,6 +474,16 @@ std::optional<mv::Settings> Database::read_settings() {
     }
 
     settings.dark_theme = dark_theme == 1;
+    if (sqlite3_column_type(statement, 4) != SQLITE_INTEGER) {
+        return fail();
+    }
+
+    const auto log_level = sqlite3_column_int64(statement, 4);
+    if (log_level < static_cast<int>(mv::LogLevel::Dbg) || log_level > static_cast<int>(mv::LogLevel::Err)) {
+        return fail();
+    }
+
+    settings.log_level = static_cast<mv::LogLevel>(log_level);
     if (sqlite3_step(statement) != SQLITE_DONE) {
         return fail();
     }
@@ -487,7 +497,7 @@ std::optional<mv::Settings> Database::read_settings() {
 
 bool Database::write_settings(const mv::Settings& settings) {
     static constexpr const char* sql =
-        "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2, language = ?3, dark_theme = ?4 WHERE id = 1";
+        "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2, language = ?3, dark_theme = ?4, log_level = ?5 WHERE id = 1";
     auto fail = [this] {
         log_err("DB: cannot write settings (missing row or SQLite error): {}", sqlite3_errmsg(_handle));
         if (_statement_write_settings) {
@@ -516,6 +526,10 @@ bool Database::write_settings(const mv::Settings& settings) {
     }
 
     if (sqlite3_bind_int(statement, 4, settings.dark_theme ? 1 : 0) != SQLITE_OK) {
+        return fail();
+    }
+
+    if (sqlite3_bind_int(statement, 5, static_cast<int>(settings.log_level)) != SQLITE_OK) {
         return fail();
     }
 

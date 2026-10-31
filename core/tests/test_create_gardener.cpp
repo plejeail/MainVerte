@@ -91,6 +91,7 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     CHECK(settings.current_gardener_id == 42);
     CHECK(settings.current_collection_id == 73);
     settings.current_gardener_id = 0;
+    settings.log_level = mv::LogLevel::Wrn;
     CHECK(mv::settings().current_gardener_id == 42);
     REQUIRE(mv::save_settings(settings));
     CHECK(mv::settings().current_gardener_id == 42);
@@ -98,11 +99,13 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     deliver_completions();
     CHECK(mv::settings().current_gardener_id == 0);
     CHECK(mv::settings().current_collection_id == 73);
+    CHECK(mv::settings().log_level == mv::LogLevel::Wrn);
     REQUIRE(execute_on_worker(
         "CREATE TRIGGER check_settings BEFORE INSERT ON gardener BEGIN "
         "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM settings WHERE current_gardener_id IS NULL "
-        "AND current_collection_id=73) THEN RAISE(ABORT, 'settings not saved') END; END;") == SQLITE_OK);
+        "AND current_collection_id=73 AND log_level=2) THEN RAISE(ABORT, 'settings not saved') END; END;") == SQLITE_OK);
     auto invalid_settings = mv::settings();
+    invalid_settings.log_level = mv::LogLevel::Err;
     invalid_settings.current_gardener_id = 42;
     invalid_settings.current_collection_id = 999;
     REQUIRE(mv::save_settings(invalid_settings));
@@ -110,6 +113,7 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     deliver_completions();
     CHECK(mv::settings().current_gardener_id == 0);
     CHECK(mv::settings().current_collection_id == 73);
+    CHECK(mv::settings().log_level == mv::LogLevel::Wrn);
     const auto caller = std::this_thread::get_id();
     std::optional<mv::GardenerResult> received;
     int calls = 0;
