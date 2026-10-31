@@ -84,6 +84,9 @@ private:
         /// Call on the owner thread, as for save_settings().
 [[nodiscard]] Settings settings();
 
+/// Schema version used by a successfully initialized database.
+[[nodiscard]] int database_version();
+
         /// Queues a write on the database worker; returns whether the job was accepted.
         /// On success, updates the in-memory copy through platform::dispatch_callback.
         /// An optional callback receives persistence success on the owner thread,

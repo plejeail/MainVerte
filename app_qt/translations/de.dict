@@ -19,3 +19,6 @@ Settings_SaveFailed,Die Einstellungen konnten nicht gespeichert werden. Versuche
 Appearance_Title,Darstellung
 Theme_Light,Hell
 Theme_Dark,Dunkel
+Settings_SoftwareVersion,Softwareversion
+Settings_DatabaseVersion,Datenbankversion
+Settings_DebugEnabled,Debug-Optionen aktivieren

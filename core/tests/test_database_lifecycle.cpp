@@ -134,6 +134,7 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
     DatabaseFile file;
     const mv::Settings settings{
         .dark_theme = true,
+        .debug_enabled = true,
         .log_level = mv::LogLevel::Wrn,
         .current_gardener_id = 42,
         .current_collection_id = 73,
@@ -147,6 +148,7 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
         CHECK(defaults->current_gardener_id == 0);
         CHECK(defaults->current_collection_id == 0);
         CHECK_FALSE(defaults->dark_theme);
+        CHECK_FALSE(defaults->debug_enabled);
         CHECK(defaults->log_level == mv::LogLevel::Dbg);
         database.start();
         REQUIRE(run_job(database, [](sqlite3* handle) {
@@ -171,9 +173,11 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
         CHECK(restored->current_collection_id == 73);
         CHECK(restored->language == "fr");
         CHECK(restored->dark_theme);
+        CHECK(restored->debug_enabled);
         CHECK(restored->log_level == mv::LogLevel::Wrn);
         auto updated = *restored;
         updated.dark_theme = false;
+        updated.debug_enabled = false;
         updated.current_gardener_id = 0;
         REQUIRE(database.write_settings(updated));
         const auto partial = database.read_settings();
@@ -181,6 +185,7 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
         CHECK(partial->current_gardener_id == 0);
         CHECK(partial->current_collection_id == 73);
         CHECK_FALSE(partial->dark_theme);
+        CHECK_FALSE(partial->debug_enabled);
         CHECK(partial->log_level == mv::LogLevel::Wrn);
         REQUIRE(database.write_settings({}));
         database.start();
@@ -348,4 +353,22 @@ TEST_CASE("Invalid stored log levels are rejected without narrowing") {
     const auto recovered = run_job(database, [&database](sqlite3*) { return database.read_settings(); });
     REQUIRE(recovered.has_value());
     CHECK(recovered->log_level == mv::LogLevel::Dbg);
+}
+
+TEST_CASE("Invalid stored debug flags are rejected and the cached statement recovers") {
+    Database database;
+    REQUIRE(database.initialize(":memory:"));
+    database.start();
+    for (const auto* value : {"-1", "2", "256", "0.5", "'invalid'"}) {
+        const auto sql = std::format("PRAGMA ignore_check_constraints=ON; UPDATE settings SET debug_enabled={};", value);
+        REQUIRE(run_job(database, [sql](sqlite3* handle) {
+            return sqlite3_exec(handle, sql.c_str(), nullptr, nullptr, nullptr);
+        }) == SQLITE_OK);
+        CHECK_FALSE(run_job(database, [&database](sqlite3*) { return database.read_settings(); }).has_value());
+    }
+
+    REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({}); }));
+    const auto recovered = run_job(database, [&database](sqlite3*) { return database.read_settings(); });
+    REQUIRE(recovered.has_value());
+    CHECK_FALSE(recovered->debug_enabled);
 }

@@ -7,6 +7,18 @@ import QtQuick.Layouts
 Page {
     id: settingsPage
 
+    property int versionClicks: 0
+
+    function versionClicked() {
+        if (settings.saving || settings.debugEnabled)
+            return;
+        versionClicks++;
+        if (versionClicks === 5) {
+            versionClicks = 0;
+            settings.selectDebugEnabled(true);
+        }
+    }
+
     required property var settings
 
     title: Ts.get(TextId.Parameters_Title)
@@ -110,12 +122,29 @@ Page {
             wrapMode: Text.WordWrap
         }
 
+        Label {
+            objectName: "softwareVersion"
+            Layout.fillWidth: true
+            text: Ts.get(TextId.Settings_SoftwareVersion) + ": " + settingsPage.settings.softwareVersion
+            wrapMode: Text.WordWrap
+            TapHandler { onTapped: settingsPage.versionClicked() }
+        }
+
+        Label {
+            objectName: "databaseVersion"
+            Layout.fillWidth: true
+            text: Ts.get(TextId.Settings_DatabaseVersion) + ": " + settingsPage.settings.databaseVersion
+            wrapMode: Text.WordWrap
+            TapHandler { onTapped: settingsPage.versionClicked() }
+        }
+
         GroupBox {
             id: debugBox
 
             Layout.fillWidth: true
             title: "-- DEBUG OPTIONS --"
-            visible: true
+            objectName: "debugBox"
+            visible: settingsPage.settings.debugEnabled
 
             ColumnLayout {
                 anchors.left: parent.left
@@ -123,6 +152,17 @@ Page {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 spacing: 12
+
+                CheckBox {
+                    objectName: "debugEnabledCheckbox"
+                    text: Ts.get(TextId.Settings_DebugEnabled)
+                    checked: settingsPage.settings.debugEnabled
+                    enabled: !settingsPage.settings.saving
+                    onClicked: {
+                        settingsPage.versionClicks = 0;
+                        settingsPage.settings.selectDebugEnabled(checked);
+                    }
+                }
 
                 Label {
                     font.bold: true

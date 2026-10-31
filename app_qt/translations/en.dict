@@ -19,3 +19,6 @@ Settings_SaveFailed,Unable to save settings. Please try again.
 Appearance_Title,Appearance
 Theme_Light,Light
 Theme_Dark,Dark
+Settings_SoftwareVersion,Software version
+Settings_DatabaseVersion,Database version
+Settings_DebugEnabled,Enable debug options
