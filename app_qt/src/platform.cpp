@@ -1,20 +1,21 @@
-#include <mainverte_core.h>
-
-#include <string_view>
+#include <mv_core.h>
 
 #include <cstdlib>
+#include <string_view>
+
 #include <QGuiApplication>
 #include <QMetaObject>
 
 #include "mvlog/mvlog.h"
+#include "mv_move_only_function.h"
 
 
-void mv::platform::log(Level severity, std::string_view msg) {
+void mv::platform::log(LogLevel severity, std::string_view msg) {
     switch (severity) {
-    case Level::Dbg: mvlog::dbg(msg); break;
-    case Level::Inf: mvlog::inf(msg); break;
-    case Level::Wrn: mvlog::wrn(msg); break;
-    case Level::Err: mvlog::err(msg); break;
+    case LogLevel::Dbg: mvlog::dbg(msg); break;
+    case LogLevel::Inf: mvlog::inf(msg); break;
+    case LogLevel::Wrn: mvlog::wrn(msg); break;
+    case LogLevel::Err: mvlog::err(msg); break;
     }
 }
 

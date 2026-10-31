@@ -1,21 +1,30 @@
 #include "translator.h"
 
+#include <array>
+#include <cassert>
+#include <cstddef>
 #include <cstdint>
+#include <string_view>
 
+#include <QByteArray>
 #include <QLocale>
 #include <QQmlEngine>
 #include <QString>
+#include <QVariantList>
 #include <QVariantMap>
+#include <QQmlEngine>
 
 #include "generated_translations.hpp"
 #include "mvlog/mvlog.h"
 
 
 namespace {
+
 constexpr ts::TextId First_Id = static_cast<ts::TextId>(0);
 constexpr int Text_Count = static_cast<int>(ts::TextId::Count);
 mv::i18n::Language selected_language = mv::i18n::languages[0];
-}
+
+}  // namespace
 
 std::array<std::string_view, ts::Lang_Count> ts::list_languages() {
     static_assert(ts::Lang_Count == mv::i18n::languages.size());
@@ -31,7 +40,7 @@ std::array<std::string_view, ts::Lang_Count> ts::list_languages() {
 QVariantList ts::language_options() {
     QVariantList result;
     for (const auto code : ts::list_languages()) {
-        const auto language = QString::fromUtf8(code.data(), code.size());
+        const auto language = QString::fromUtf8(code.data(), static_cast<int>(code.size()));
         const QLocale locale(language);
         const QString resource = QStringLiteral("qrc:/img/flag_%1.svg").arg(language);
         result.append(

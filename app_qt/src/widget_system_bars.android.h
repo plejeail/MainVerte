@@ -1,5 +1,6 @@
 #pragma once
 
+
 class QWindow;
 class AppSettings;
 

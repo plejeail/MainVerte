@@ -2,6 +2,7 @@
 #include <chrono>
 #include <filesystem>
 #include <format>
+#include <future>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -9,13 +10,15 @@
 #include <type_traits>
 #include <utility>
 
-#include <future>
+#include <doctest.h>
 #include <sqlite3.h>
 
 #include "database.h"
-#include "doctest.h"
+#include "mv_core.h"
+
 
 namespace {
+
 struct DatabaseFile {
     std::filesystem::path directory;
     std::string filename;
@@ -77,7 +80,8 @@ auto run_job(Database& database, Job job) {
     REQUIRE(result.wait_for(std::chrono::seconds(5)) == std::future_status::ready);
     return result.get();
 }
-}
+
+}  // namespace
 
 TEST_CASE("Reopening a database preserves user data and schema version") {
     DatabaseFile file;
@@ -128,6 +132,13 @@ TEST_CASE("An opening failure permits a successful retry on the same database ob
 
 TEST_CASE("Settings persist every field across database reopening and map zero to NULL") {
     DatabaseFile file;
+    const mv::Settings settings{
+        .dark_theme = true,
+        .log_level = mv::LogLevel::Dbg,
+        .current_gardener_id = 42,
+        .current_collection_id = 73,
+        .language = "fr",
+    };
     {
         Database database;
         REQUIRE(database.initialize(file.filename));
@@ -143,8 +154,12 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
                 "INSERT INTO collection VALUES(73, 42, 'Collection', 123, 123);",
                 nullptr, nullptr, nullptr);
         }) == SQLITE_OK);
-        REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73, "fr", true}); }));
-        REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73, "fr", true}); }));
+        REQUIRE(run_job(database, [&database, settings](sqlite3*) {
+            return database.write_settings(settings);
+        }));
+        REQUIRE(run_job(database, [&database, settings](sqlite3*) {
+            return database.write_settings(settings);
+        }));
     }
     {
         Database database;
@@ -155,7 +170,10 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
         CHECK(restored->current_collection_id == 73);
         CHECK(restored->language == "fr");
         CHECK(restored->dark_theme);
-        REQUIRE(database.write_settings({0, 73, "fr"}));
+        auto updated = *restored;
+        updated.dark_theme = false;
+        updated.current_gardener_id = 0;
+        REQUIRE(database.write_settings(updated));
         const auto partial = database.read_settings();
         REQUIRE(partial.has_value());
         CHECK(partial->current_gardener_id == 0);
@@ -173,6 +191,10 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
 
 TEST_CASE("Settings errors preserve values and cached statements recover") {
     Database database;
+    mv::Settings settings{};
+    settings.dark_theme = true;
+    settings.current_gardener_id = 42;
+    settings.current_collection_id = 73;
     REQUIRE(database.initialize(":memory:"));
     database.start();
     REQUIRE(run_job(database, [](sqlite3* handle) {
@@ -181,8 +203,16 @@ TEST_CASE("Settings errors preserve values and cached statements recover") {
             "INSERT INTO collection VALUES(73, 42, 'Collection', 123, 123);",
             nullptr, nullptr, nullptr);
     }) == SQLITE_OK);
-    REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73, "fr", true}); }));
-    CHECK_FALSE(run_job(database, [&database](sqlite3*) { return database.write_settings({0, 999, "fr"}); }));
+    REQUIRE(run_job(database, [&database, settings](sqlite3*) {
+        return database.write_settings(settings);
+    }));
+    auto invalid = settings;
+    invalid.log_level = mv::LogLevel::Err;
+    invalid.current_gardener_id = 0;
+    invalid.current_collection_id = 999;
+    CHECK_FALSE(run_job(database, [&database, invalid](sqlite3*) {
+        return database.write_settings(invalid);
+    }));
     auto retained = run_job(database, [&database](sqlite3*) { return database.read_settings(); });
     REQUIRE(retained.has_value());
     CHECK(retained->current_gardener_id == 42);
@@ -206,7 +236,9 @@ TEST_CASE("Settings errors preserve values and cached statements recover") {
     REQUIRE(run_job(database, [](sqlite3* handle) {
         return sqlite3_exec(handle, "INSERT INTO settings(id) VALUES(1);", nullptr, nullptr, nullptr);
     }) == SQLITE_OK);
-    REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({42, 73, "fr", true}); }));
+    REQUIRE(run_job(database, [&database, settings](sqlite3*) {
+        return database.write_settings(settings);
+    }));
     retained = run_job(database, [&database](sqlite3*) { return database.read_settings(); });
     REQUIRE(retained.has_value());
     CHECK(retained->current_gardener_id == 42);

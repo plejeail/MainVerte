@@ -1,6 +1,8 @@
+// clazy:skip
+#include <doctest/doctest.h>
+
 #include "mvlog/mvlog.h"
 
-#include <doctest/doctest.h>
 
 TEST_CASE("Qt log formatters preserve UTF-8, views and formatting options") {
     const auto text = QString::fromUtf8("\xc3\xa9t\xc3\xa9");

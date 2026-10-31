@@ -11,15 +11,15 @@
 #include <string>
 #include <string_view>
 
-#include "move_only_function.h"
-#include "definitions.h"
-#include "settings.h"
+#include "mv_definitions.h"
+#include "mv_move_only_function.h"
+#include "mv_settings.h"
 
 
 namespace mv {
 
 /// Severity of a message emitted through platform::log().
-enum class Level : int8_t { Dbg, Inf, Wrn, Err, };
+enum class LogLevel : int8_t { Dbg, Inf, Wrn, Err, };
 
 /// Platform-specific facilities supplied by the application.
 namespace platform {
@@ -28,7 +28,7 @@ namespace platform {
 /// The application provides the definition for each target platform. The
 /// message is borrowed for the duration of this call and must not be retained.
 /// Implementations should preserve the requested severity.
-void log(Level severity, std::string_view msg);
+void log(LogLevel severity, std::string_view msg);
 
 /// Enqueues a user callback on the application's chosen execution thread.
 ///
@@ -81,7 +81,6 @@ public:
 private:
     bool initialized{false};
 };
-
 
         /// Returns a copy of the loaded settings. Requires successful initialization.
         /// Call on the owner thread, as for save_settings().

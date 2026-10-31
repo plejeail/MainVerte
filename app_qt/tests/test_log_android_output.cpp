@@ -1,13 +1,17 @@
-#include "../src/mvlog/mvlog.inl.h"
-
+// clazy:skip
 #include <android/log.h>
 #include <doctest/doctest.h>
 
+#include "../src/mvlog/mvlog.inl.h"
+
+
 namespace {
+
 int captured_priority{};
 std::string captured_tag;
 std::string captured_text;
-}
+
+}  // namespace
 
 extern "C" int __android_log_write(int priority, const char* tag, const char* text) {
     captured_priority = priority;

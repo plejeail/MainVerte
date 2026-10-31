@@ -2,8 +2,8 @@
 
 #include <android/log.h>
 
-namespace mvlog::detail {
-void platform_output(Level level, const std::string& record) {
+
+void mvlog::detail::platform_output(Level level, const std::string& record) {
     int priority = ANDROID_LOG_INFO;
     switch (level) {
     case Level::Debug:   priority = ANDROID_LOG_DEBUG; break;
@@ -16,4 +16,3 @@ void platform_output(Level level, const std::string& record) {
     // record even when liblog filters or truncates a message.
     (void)::__android_log_write(priority, "MainVerte", record.c_str());
 }
-}  // namespace mvlog::detail

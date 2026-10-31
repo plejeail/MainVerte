@@ -1,14 +1,17 @@
-#include "../src/mvlog/mvlog.inl.h"
-
-#include <doctest/doctest.h>
-
+// clazy:skip
 #include <chrono>
 #include <fstream>
 #include <iterator>
 #include <string>
 #include <system_error>
 
+#include <doctest/doctest.h>
+
+#include "../src/mvlog/mvlog.inl.h"
+
+
 namespace {
+
 class TemporaryDirectory {
 public:
     TemporaryDirectory() {
@@ -50,7 +53,8 @@ std::string read_file(const std::filesystem::path& path) {
     REQUIRE_FALSE(input.bad());
     return contents;
 }
-}
+
+}  // namespace
 
 TEST_CASE("FileStream flush and close are harmless when closed") {
     mvlog::detail::FileStream stream;

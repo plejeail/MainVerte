@@ -1,18 +1,19 @@
 #include "mvlog.inl.h"
 
-
 #include <cstdio>
 #include <filesystem>
 #include <limits>
 #include <mutex>
 #include <string>
 
+
 #if !MV_LOG_DISABLED
-namespace mvlog {
+
 namespace {
+
 struct LogState {
     std::mutex mutex;
-    detail::FileStream file;
+    mvlog::detail::FileStream file;
     std::uintmax_t size{0};
     std::uintmax_t max_size{0};
     std::size_t max_archives{0};
@@ -29,16 +30,19 @@ void report_file_error(LogState& log) {
     log.file_enabled = false;
     (void)log.file.close();
     std::tm date{};
-    if (!detail::local_time(date)) {
+    if (!mvlog::detail::local_time(date)) {
         date.tm_mon = -1;
     }
 
-    detail::platform_output(Level::Error, detail::format_record(
-        'E', date, "mvlog: file output disabled after an I/O error."));
-}
+    mvlog::detail::platform_output(
+        mvlog::Level::Error,
+        mvlog::detail::format_record('E', date, "mvlog: file output disabled after an I/O error.")
+    );
 }
 
-InitResult init(const char* logfile_path, std::size_t max_size_kB, short max_files) {
+}  // namespace
+
+mvlog::InitResult mvlog::init(const char* logfile_path, std::size_t max_size_kB, short max_files) {
     auto& log = log_state();
     const std::lock_guard lock(log.mutex);
     if (log.initialized) {
@@ -72,8 +76,7 @@ InitResult init(const char* logfile_path, std::size_t max_size_kB, short max_fil
     return InitResult::Ok;
 }
 
-namespace detail {
-void write(const Level level, const std::string_view message) {
+void mvlog::detail::write(const mvlog::Level level, const std::string_view message) {
     auto& log = log_state();
     const std::lock_guard lock(log.mutex);
     std::tm date{};
@@ -108,6 +111,5 @@ void write(const Level level, const std::string_view message) {
 
     log.size += record.size();
 }
-}  // namespace detail
-}  // namespace mvlog
+
 #endif

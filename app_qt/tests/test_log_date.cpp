@@ -1,6 +1,5 @@
+// clazy:skip
 #include <doctest/doctest.h>
-
-#include "../src/mvlog/mvlog.inl.h"
 
 #include <cstdlib>
 #include <string>
@@ -8,7 +7,11 @@
 #include <vector>
 #include <atomic>
 
+#include "../src/mvlog/mvlog.inl.h"
+
+
 namespace {
+
 std::time_t timestamp(int year, unsigned month, unsigned day, int hour = 0, int minute = 0, int second = 0) {
     using namespace std::chrono;
     return static_cast<std::time_t>((sys_days{std::chrono::year{year} / month / day} +
@@ -43,7 +46,8 @@ struct RestoreZone {
 #endif
     }
 };
-}
+
+}  // namespace
 
 TEST_CASE("UTC conversion handles late hours, leap days and century boundaries") {
     std::tm date{};

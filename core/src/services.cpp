@@ -1,5 +1,5 @@
 #include "services.h"
-#include "mainverte_core.h"
+#include "mv_core.h"
 
 #include <cassert>
 #include <expected>
@@ -12,18 +12,21 @@
 #include <sqlite3.h>
 
 #include "database.h"
-#include "definitions.h"
-#include "move_only_function.h"
+#include "mv_definitions.h"
+#include "mv_move_only_function.h"
+#include "mv_settings.h"
 #include "tools.h"
 
 
 namespace {
+
 struct ServicesImpl {
     mv::Settings settings;
     Database database;
 };
 
 std::unique_ptr<ServicesImpl> services_instance;  // NOLINT
+
 }  // namespace
 
 mv::Settings& service::settings() {
@@ -59,6 +62,7 @@ bool mv::Services::initialize(std::string_view database_path) {
         log_err("services: settings loading failed");
         return false;
     }
+
     services_instance->settings = *settings;
     database.start();
 
@@ -77,20 +81,24 @@ mv::Settings mv::settings() {
 bool mv::save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callback) {
     assert(services_instance != nullptr);
     auto completion = std::make_shared<MoveOnlyFunction<void(bool)>>(std::move(callback));
-    const bool accepted = service::database().submit([settings, completion](sqlite3*) {
+    const bool accepted = service::database().submit(
+    [settings, completion](sqlite3*) {
         const bool saved = service::database().write_settings(settings);
         mv::platform::dispatch_callback([settings, saved, completion] {
             if (saved && services_instance) {
                 services_instance->settings = settings;
             }
+
             if (*completion) {
                 (*completion)(saved);
             }
         });
     });
+
     if (!accepted && *completion) {
         mv::platform::dispatch_callback([completion] { (*completion)(false); });
     }
+
     return accepted;
 }
 
@@ -104,20 +112,23 @@ bool mv::create_and_select_gardener(std::string name, MoveOnlyFunction<void(Gard
 
     auto completion = std::make_shared<MoveOnlyFunction<void(GardenerResult)>>(std::move(callback));
     const bool accepted = service::database().submit(
-        [name = std::move(name), completion](sqlite3*) {
-            auto result = service::database().create_and_select_gardener(name);
-            mv::platform::dispatch_callback([result = std::move(result), completion]() mutable {
-                if (result && services_instance) {
-                    services_instance->settings.current_gardener_id = result->id;
-                    services_instance->settings.current_collection_id = 0;
-                }
-                (*completion)(std::move(result));
-            });
+    [name = std::move(name), completion](sqlite3*) {
+        auto result = service::database().create_and_select_gardener(name);
+        mv::platform::dispatch_callback([result = std::move(result), completion]() mutable {
+            if (result && services_instance) {
+                services_instance->settings.current_gardener_id = result->id;
+                services_instance->settings.current_collection_id = 0;
+            }
+
+            (*completion)(std::move(result));
         });
+    });
+
     if (!accepted) {
         dispatch_result(std::move(*completion), GardenerResult(std::unexpected(
             MainverteError{.code = MainverteError::Code::NotRunning, .message = "Database is not running"})));
     }
+
     return accepted;
 }
 

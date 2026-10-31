@@ -1,9 +1,5 @@
-#include "../src/mvlog/mvlog.h"
-
-#include <doctest/doctest.h>
-
+// clazy:skip
 #include <chrono>
-#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -16,7 +12,13 @@
 #include <unistd.h>
 #endif
 
+#include <doctest/doctest.h>
+
+#include "../src/mvlog/mvlog.h"
+
+
 namespace {
+
 std::string read_log(const std::filesystem::path& path) {
     std::ifstream input(path, std::ios::binary);
     REQUIRE(input.is_open());
@@ -56,7 +58,8 @@ private:
     int saved{-1};
     std::FILE* file{nullptr};
 };
-}
+
+}  // namespace
 
 TEST_CASE("Desktop logger initializes, formats, rotates, and falls back to console") {
     std::error_code error;

@@ -21,6 +21,7 @@
 
 #include <condition_variable>
 #include <cstdint>
+#include <cstddef>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -29,13 +30,13 @@
 #include <string_view>
 #include <thread>
 
-#include "settings.h"
-#include "definitions.h"
-#include "move_only_function.h"
+#include "mv_settings.h"
+#include "mv_definitions.h"
+#include "mv_move_only_function.h"
+
 
 struct sqlite3;
 struct sqlite3_stmt;
-
 
 class Database {
 public:
@@ -81,6 +82,8 @@ private:
 };
 
 namespace detail {
+
 bool configure_database(sqlite3* handle);
 bool migrate_script(sqlite3* handle, std::string_view script, size_t version);
-}
+
+}  // namespace detail

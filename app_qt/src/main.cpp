@@ -1,5 +1,6 @@
 #include <cstdlib>
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QGuiApplication>
 #include <QIcon>
@@ -10,13 +11,13 @@
 #include <QQmlContext>
 #include <QQuickStyle>
 #include <QStandardPaths>
+#include <QWindow>
 #include <Qt>
 #include <QtQml/QQmlExtensionPlugin>
-#include <QWindow>
 
 #include "app_settings.h"
+#include "mv_core.h"
 #include "mvlog/mvlog.h"
-#include "mainverte_core.h"
 #include "tools.h"
 #include "translator.h"
 #include "widget_wizard_setup.h"
@@ -30,12 +31,14 @@ Q_IMPORT_QML_PLUGIN(MainVerteStylePlugin)
 Q_IMPORT_QML_PLUGIN(MainVerteShowcasePlugin)
 
 namespace {
+
 void on_object_creation_failed() {
     QCoreApplication::exit(-1);
 }
 
 void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services);
-}
+
+}  // namespace
 
 int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     Stopwatch sw_app_init("app init");
@@ -122,6 +125,7 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
 }
 
 namespace {
+
 void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services) {
     auto* setup_wizard = new SetupWizard(core_services, &engine);
     QObject::connect(setup_wizard, &SetupWizard::languageChanged,
@@ -165,4 +169,4 @@ void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services
     }
 }
 
-}
+}  // namespace

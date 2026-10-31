@@ -1,7 +1,5 @@
 #pragma once
 
-#include "mvlog.h"
-
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -16,6 +14,9 @@
 #include <string_view>
 #include <system_error>
 #include <vector>
+
+#include "mvlog.h"
+
 
 namespace mvlog::detail {
 
@@ -119,14 +120,16 @@ inline void copy_time(char* destination, unsigned value) noexcept {
 }
 
 inline std::string format_record(char level, const std::tm& date, std::string_view message) {
-    char prefix[]{"D 0000 00:00:00 "};
-    prefix[0] = level;
-    copy_time(prefix + 2, static_cast<unsigned>(date.tm_mon + 1));
-    copy_time(prefix + 4, static_cast<unsigned>(date.tm_mday));
-    copy_time(prefix + 7, static_cast<unsigned>(date.tm_hour));
-    copy_time(prefix + 10, static_cast<unsigned>(date.tm_min));
-    copy_time(prefix + 13, static_cast<unsigned>(date.tm_sec));
-    std::string record{prefix, sizeof(prefix) - 1};
+    static constexpr std::string_view static_fmt{"D 0000 00:00:00 "};
+    std::string record;
+    record.reserve(static_fmt.size() + message.size());
+    record.append(static_fmt);
+    record[0] = level;
+    copy_time(record.data() + 2,  static_cast<unsigned>(date.tm_mon + 1));
+    copy_time(record.data() + 4,  static_cast<unsigned>(date.tm_mday));
+    copy_time(record.data() + 7,  static_cast<unsigned>(date.tm_hour));
+    copy_time(record.data() + 10, static_cast<unsigned>(date.tm_min));
+    copy_time(record.data() + 13, static_cast<unsigned>(date.tm_sec));
     record.append(message);
     record += '\n';
     return record;
@@ -311,6 +314,7 @@ private:
             std::uint64_t index;
             std::filesystem::path path;
         };
+
         std::vector<Archive> archives;
         auto prefix = _filename.filename().native();
         prefix += std::filesystem::path{"."}.native();
@@ -332,11 +336,13 @@ private:
                         }
                         index = index * 10 + value;
                     }
+
                     const auto status = entry->symlink_status(error);
                     if (error || !std::filesystem::is_regular_file(status)) {
                         return false;
                     }
-                    archives.push_back({index, entry->path()});
+
+                    archives.push_back({.index=index, .path=entry->path()});
                 }
             }
 

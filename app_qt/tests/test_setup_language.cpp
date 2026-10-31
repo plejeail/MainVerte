@@ -1,7 +1,5 @@
 // clazy:skip
 #define DOCTEST_CONFIG_IMPLEMENT
-#include "doctest.h"
-
 #include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
@@ -14,9 +12,12 @@
 #include <QTemporaryDir>
 #include <QTimer>
 
+#include <doctest.h>
+
 #include "translator.h"
 #include "app_settings.h"
 #include "widget_wizard_setup.h"
+
 
 TEST_CASE("wizard language is transient until gardener submission and survives restart") {
     QTemporaryDir directory;

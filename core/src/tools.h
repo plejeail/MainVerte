@@ -12,8 +12,8 @@
 #include <string_view>
 #include <utility>
 
-#include "mainverte_core.h"
-#include "move_only_function.h"
+#include "mv_core.h"
+#include "mv_move_only_function.h"
 
 
 // Request forced inlining where supported; the compiler has the final say.
@@ -30,22 +30,22 @@
 
 MV_INLINE void log_dbg(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::platform::log(mv::Level::Dbg, message);
+    mv::platform::log(mv::LogLevel::Dbg, message);
 }
 
 MV_INLINE void log_inf(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::platform::log(mv::Level::Inf, message);
+    mv::platform::log(mv::LogLevel::Inf, message);
 }
 
 MV_INLINE void log_wrn(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::platform::log(mv::Level::Wrn, message);
+    mv::platform::log(mv::LogLevel::Wrn, message);
 }
 
 MV_INLINE void log_err(std::string_view message) {
     assert(message.size() > 0ULL && message.size() < 1000ULL);
-    mv::platform::log(mv::Level::Err, message);
+    mv::platform::log(mv::LogLevel::Err, message);
 }
 
 template<typename... Args> requires (sizeof...(Args) > 0)

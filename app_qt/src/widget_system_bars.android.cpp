@@ -1,7 +1,5 @@
 #include "widget_system_bars.android.h"
 
-#include "app_settings.h"
-
 #include <QCoreApplication>
 #include <QDebug>
 #include <QGuiApplication>
@@ -9,10 +7,12 @@
 #include <QPointer>
 #include <QWindow>
 
+#include "app_settings.h"
 #include "mvlog/mvlog.h"
 
 
 namespace {
+
 void use_light_system_icons(bool dark_background) {
     // View access belongs to the Android UI thread; only the chosen appearance crosses threads.
     QNativeInterface::QAndroidApplication::runOnAndroidMainThread([dark_background] {
@@ -32,7 +32,7 @@ void use_light_system_icons(bool dark_background) {
             return;
         }
 
-                // Android's LIGHT flags describe the background and select DARK icons.
+        // Android's LIGHT flags describe the background and select DARK icons.
         // Navigation bar appearance is supported from API 26 onward.
         const jint navigation_mask = QNativeInterface::QAndroidApplication::sdkVersion() >= 26 ? 16 : 0;
         const jint mask = (modern ? 8 : 8192) | navigation_mask;
@@ -45,7 +45,8 @@ void use_light_system_icons(bool dark_background) {
         }
     });
 }
-}
+
+}  // namespace
 
 void configure_app_system_bars(AppSettings& settings, QWindow* setup_window) {
     const QPointer<QWindow> wizard(setup_window);
@@ -65,5 +66,6 @@ void configure_app_system_bars(AppSettings& settings, QWindow* setup_window) {
         QObject::connect(setup_window, &QWindow::visibleChanged, &settings, update, Qt::QueuedConnection);
         QObject::connect(setup_window, &QObject::destroyed, &settings, update, Qt::QueuedConnection);
     }
+
     update();
 }

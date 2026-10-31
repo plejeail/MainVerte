@@ -1,11 +1,13 @@
 // clazy:skip
+#include <doctest.h>
 #include <sqlite3.h>
-#include "doctest.h"
 
 #include "database.h"
 #include "sql_scripts.hpp"
 
+
 namespace {
+
 struct TestDatabase {
     sqlite3* handle = nullptr;
     TestDatabase() {
@@ -26,7 +28,8 @@ struct TestDatabase {
         return value;
     }
 };
-}
+
+}  // namespace
 
 TEST_CASE("Migration commits schema and version together") {
     TestDatabase db;

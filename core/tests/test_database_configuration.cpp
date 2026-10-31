@@ -8,12 +8,14 @@
 #include <string>
 #include <system_error>
 
+#include <doctest.h>
 #include <sqlite3.h>
-#include "doctest.h"
 
 #include "database.h"
 
+
 namespace {
+
 struct Connection {
     sqlite3* handle = nullptr;
     ~Connection() { CHECK(sqlite3_close(handle) == SQLITE_OK); }
@@ -26,7 +28,8 @@ struct Connection {
         return reinterpret_cast<const char*>(sqlite3_column_text(raw, 0));
     }
 };
-}
+
+}  // namespace
 
 TEST_CASE("Configuration verifies settings on an in-memory database") {
     REQUIRE(sqlite3_initialize() == SQLITE_OK);

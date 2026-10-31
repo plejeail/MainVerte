@@ -36,7 +36,7 @@ Studio or Ninja Multi-Config:
 
 ```powershell
 cmake -S . -B build/desktop -DBUILD_TESTING=ON
-cmake --build build/desktop --config Debug --target appMainVerte mainverte_core_tests
+cmake --build build/desktop --config Debug
 ctest --test-dir build/desktop -C Debug --output-on-failure --no-tests=error
 ```
 
@@ -48,7 +48,7 @@ For a single-config generator such as Ninja, use:
 
 ```powershell
 cmake -S . -B build/desktop -G Ninja -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTING=ON
-cmake --build build/desktop --target appMainVerte mainverte_core_tests
+cmake --build build/desktop
 ctest --test-dir build/desktop --output-on-failure --no-tests=error
 ```
 
@@ -141,7 +141,7 @@ Its first dictionary defines all text IDs and their numeric order. Other
 dictionaries must contain exactly the same IDs, in any order. Numeric IDs are
 internal build indices and must not be persisted.
 
-Each `MainVerte_<language>.dict` is a UTF-8 CSV without a header, with exactly two
+Each `<language>.dict` is a UTF-8 CSV without a header, with exactly two
 columns: C++ identifier and text. Use IDs such as `App_Title`; `Count`, C++
 keywords and reserved identifiers are rejected. Duplicate IDs and empty
 dictionaries are errors. Empty translations are allowed. CSV quoting supports
@@ -163,7 +163,8 @@ cmake --build build/desktop --config Debug --target appMainVerte_generate_transl
 ```
 
 The single generated header, `generated_translations.hpp`, exposes
-`mv::i18n::TextId` and `Count`, a const `std::array<QString, ...>` per language
+`mv::i18n::TextId` (including `mv::i18n::TextId::Count`), a const
+`std::array<QString, ...>` per language
 initialized with `QStringLiteral()`, and the `languages` registry of language
 codes (`std::string_view`) and text spans (`std::span<const QString>`).
 The dictionaries remain UTF-8; generated text literals are UTF-16 at compile
@@ -181,10 +182,15 @@ The generated namespace exposes the enum to the `MainVerte` QML module using
 as `TextId.App_Title`. The header must be processed by Qt AUTOMOC and the QML
 type registrar, as configured for the app target.
 
-Only embedded catalogs and QML enum exposure are implemented. Language selection,
-Qt/QML text lookup,
-parameter substitution, plural handling and external catalog loading are not
-part of this generator. Existing `qsTrId()` calls do not read these catalogs.
+The generator provides embedded catalogs and QML enum exposure. The application's
+`app_qt/src/translator.cpp` handles language selection and text lookup through
+`ts::get()` in C++ and `Ts.get(TextId.App_Title)` in QML. At startup, it selects
+the saved language when supported, otherwise the first supported system language,
+falling back to English. Language changes from settings trigger QML retranslation
+at runtime.
+
+Parameter substitution, plural handling and external catalog loading are not
+provided by this generator. `qsTrId()` does not read these catalogs.
 
 Run generator regression tests independently of Qt:
 

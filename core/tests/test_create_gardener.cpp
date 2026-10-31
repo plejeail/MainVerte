@@ -1,26 +1,28 @@
 // clazy:skip
 #include <chrono>
+#include <deque>
 #include <filesystem>
 #include <format>
-#include <system_error>
-#include <deque>
+#include <future>
 #include <mutex>
 #include <optional>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <utility>
 
-#include <future>
+#include <doctest.h>
 #include <sqlite3.h>
 
 #include "database.h"
-#include "definitions.h"
-#include "move_only_function.h"
-#include "doctest.h"
-#include "mainverte_core.h"
+#include "mv_definitions.h"
+#include "mv_core.h"
+#include "mv_move_only_function.h"
 #include "services.h"
 
+
 namespace {
+
 std::mutex completion_mutex;
 std::deque<mv::MoveOnlyFunction<void()>> completions;
 
@@ -47,7 +49,8 @@ int execute_on_worker(const char* sql) {
     }
     return result.get();
 }
-}
+
+}  // namespace
 
 void mv::platform::dispatch_callback(MoveOnlyFunction<void()> callback) {
     std::lock_guard lock(completion_mutex);
@@ -99,7 +102,10 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
         "CREATE TRIGGER check_settings BEFORE INSERT ON gardener BEGIN "
         "SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM settings WHERE current_gardener_id IS NULL "
         "AND current_collection_id=73) THEN RAISE(ABORT, 'settings not saved') END; END;") == SQLITE_OK);
-    REQUIRE(mv::save_settings({42, 999, "fr"}));
+    auto invalid_settings = mv::settings();
+    invalid_settings.current_gardener_id = 42;
+    invalid_settings.current_collection_id = 999;
+    REQUIRE(mv::save_settings(invalid_settings));
     REQUIRE(execute_on_worker("SELECT 1;") == SQLITE_OK);
     deliver_completions();
     CHECK(mv::settings().current_gardener_id == 0);

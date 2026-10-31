@@ -27,3 +27,5 @@ FormatStyle: file
 CheckOptions:
   - key: misc-unused-parameters.StrictMode
     value: 'false'
+  - key: misc-include-cleaner.IgnoreHeaders
+    value: 'qtmetamacros\.h'

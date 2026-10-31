@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <chrono>
+#include <ratio>
 
 #include "mvlog/mvlog.h"
 

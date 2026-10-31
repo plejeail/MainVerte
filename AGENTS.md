@@ -16,6 +16,9 @@ Read `core/AGENTS.md` or `app_qt/AGENTS.md` when working in that subtree; both a
 - Make ownership explicit, use RAII, and use `shared_ptr` only for actual shared ownership. Preserve local conventions.
 - Do not introduce `throw`, `try`/`catch`, `dynamic_cast` or `typeid` in project code. Do not change compiler flags or vendored code to enforce this policy.
 - Insert a blank line after a completed control-flow block (if/else, for, while, switch) when another statement follows in the same scope. Keep attached else and do/while clauses together.
+- Sort includes alphabetically within three groups separated by a blank line: standard library/system headers (`<...>`), third-party headers including Qt (`<...>`), then project headers (`"..."`). Preserve conditional compilation boundaries.
+- Every C++ test source file must start with `// clazy:skip` to suppress inappropriate Qt diagnostics. Do not add this directive to production files.
+- Annotate the closing brace of every multiline namespace block with `//  namespace NAME`, or `//  namespace` for anonymous namespaces. For nested namespace syntax, use the full declared name (for example, `mv::detail`).
 
 ## Working agreement
 
@@ -27,6 +30,7 @@ Read `core/AGENTS.md` or `app_qt/AGENTS.md` when working in that subtree; both a
 
 - In Codex Cloud implementation tasks, you may commit, push a dedicated task branch and open/update a PR autonomously after relevant validation. Use at most one PR per chat, grouping all requested features and follow-up changes into it. Outside Cloud, commits and pushes require an explicit request. Never push directly to `master` or merge a PR unless requested.
 - For an authorized PR workflow, record the commit where the task branch diverged from `master` (the merge base) before making changes, and keep that base fixed throughout the chat. Do not guess a base if it cannot be established.
+- Before each push, check all C++ sources and headers added or modified by this chat against the C++ style rules above and correct violations before committing. Review the complete task diff against the fixed base, including follow-ups; keep formatting changes scoped to task files and exclude vendored code.
 - Before each push, consolidate only this chat's changes into one commit above that fixed base, using `git reset --soft <base>` and a new commit, or amend the existing single commit. Verify the final tree is preserved and unrelated edits/commits are excluded; never squash someone else's work. This is not a rebase onto a newer `master`.
 - After starting work, do not run `git pull` or merge/rebase changes from `origin` unless explicitly requested. Leave upstream conflict resolution to the user; report conflicts without integrating upstream changes.
 - Update the same PR branch on follow-ups. If rewriting an already-pushed task commit, use `--force-with-lease` with the explicit expected remote commit; stop if the branch was changed by someone else. Keep the PR title/description aligned with the complete final scope and validation results.

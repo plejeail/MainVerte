@@ -2,6 +2,7 @@
 #include <QtQml/QQmlExtensionPlugin>
 #include <QtQuickTest/quicktest.h>
 
+
 Q_IMPORT_QML_PLUGIN(MainVerteStylePlugin)
 Q_IMPORT_QML_PLUGIN(MainVerteShowcasePlugin)
 

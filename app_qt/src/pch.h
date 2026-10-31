@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <format>
+#include <ratio>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -34,6 +35,7 @@
 #include <QVariantMap>
 #include <QWindow>
 #include <Qt>
+#include <QtContainerFwd>
 #include <QtQml/QQmlExtensionPlugin>
 #include <QtQmlIntegration/qqmlintegration.h>
 

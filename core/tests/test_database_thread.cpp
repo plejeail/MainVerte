@@ -1,15 +1,16 @@
 // clazy:skip
 #include <array>
 #include <chrono>
+#include <future>
 #include <thread>
 #include <utility>
 #include <vector>
 
-#include <future>
+#include <doctest.h>
 #include <sqlite3.h>
 
 #include "database.h"
-#include "doctest.h"
+
 
 TEST_CASE("Database rejects jobs until started and rejects empty jobs") {
     Database db;

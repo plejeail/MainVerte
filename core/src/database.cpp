@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cstdint>
 #include <cstring>
+#include <expected>
 #include <filesystem>
 #include <format>
 #include <memory>
@@ -16,11 +17,13 @@
 
 #include <sqlite3.h>
 
+#include "mv_definitions.h"
 #include "sql_scripts.hpp"
 #include "tools.h"
 
 
 namespace {
+
 static constexpr size_t DATABASE_VERSION = mv::sql::scripts.size();
 static const auto TRANSIENT = SQLITE_TRANSIENT;  // NOLINT(performance-no-int-to-ptr)
 
@@ -122,6 +125,7 @@ MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_v
         log_err("DB: cannot finish {}: {}", query, sqlite3_errmsg(handle));
         return false;
     }
+
     if (sqlite3_finalize(statement.release()) != SQLITE_OK) {
         log_err("DB: cannot finalize {}: {}", query, sqlite3_errmsg(handle));
         return false;
@@ -143,6 +147,7 @@ bool prepare_statement(sqlite3* handle, Database::statement_ptr& ptr, const char
     ptr.reset(statement);
     return rc == SQLITE_OK;
 }
+
 }  // namespace
 
 bool detail::configure_database(sqlite3* handle) {
@@ -227,11 +232,13 @@ bool Database::submit(Job job) {
     if (!job) {
         return false;
     }
+
     {
         std::lock_guard lock(_mutex);
         if (_state != State::Running) {
             return false;
         }
+
         assert(_handle != nullptr);
         _jobs.push_back(std::move(job));
     }
@@ -314,7 +321,6 @@ bool Database::migrate_database(size_t current_version) {
 
     bool success = true;
     for (size_t v = current_version; v < software_version; ++v) {
-
         if (!detail::migrate_script(_handle, mv::sql::scripts[v], v + 1)) {
             return false;
         }
@@ -360,7 +366,6 @@ int64_t Database::create_gardener(const std::string& name) {
 
     int step_rc  = sqlite3_step(statement);
     int reset_rc = sqlite3_reset(statement);
-
     if (step_rc != SQLITE_DONE || reset_rc != SQLITE_OK) {
         return -1;
     }
@@ -379,6 +384,7 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
             log_err(rollback_error);
             message += rollback_error;
         }
+
         return std::unexpected(mv::MainverteError{
             .code = mv::MainverteError::Code::Database, .message = std::move(message)});
     };
@@ -386,23 +392,28 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
     if (!begin_transaction(_handle)) {
         return fail("begin");
     }
+
     transaction_started = true;
     const auto id = create_gardener(name);
     if (id <= 0) {
         return fail("insert");
     }
+
     auto settings = read_settings();
     if (!settings) {
         return fail("read settings");
     }
+
     settings->current_gardener_id = id;
     settings->current_collection_id = 0;
     if (!write_settings(*settings)) {
         return fail("select");
     }
+
     if (!end_transaction(_handle)) {
         return fail("commit");
     }
+
     return mv::Gardener{.id = id, .name = name};
 }
 
@@ -417,9 +428,11 @@ std::optional<mv::Settings> Database::read_settings() {
         }
         return std::nullopt;
     };
+
     if (!prepare_statement(_handle, _statement_read_settings, sql)) {
         return fail();
     }
+
     auto* statement = _statement_read_settings.get();
     if (sqlite3_step(statement) != SQLITE_ROW) {
         return fail();
@@ -432,9 +445,11 @@ std::optional<mv::Settings> Database::read_settings() {
         if (type == SQLITE_NULL) {
             continue;
         }
+
         if (type != SQLITE_INTEGER) {
             return fail();
         }
+
         const auto value = sqlite3_column_int64(statement, column);
         *fields[column] = static_cast<mv::id_t>(value);
     }
@@ -483,6 +498,7 @@ bool Database::write_settings(const mv::Settings& settings) {
     if (!prepare_statement(_handle, _statement_write_settings, sql)) {
         return fail();
     }
+
     auto* statement = _statement_write_settings.get();
     std::array fields{settings.current_gardener_id, settings.current_collection_id};
     for (int column = 0; column < 2; ++column) {
@@ -493,6 +509,7 @@ bool Database::write_settings(const mv::Settings& settings) {
             return fail();
         }
     }
+
     if (sqlite3_bind_text64(statement, 3, settings.language.data(), settings.language.size(),
                             SQLITE_TRANSIENT, SQLITE_UTF8) != SQLITE_OK) {
         return fail();
@@ -501,11 +518,14 @@ bool Database::write_settings(const mv::Settings& settings) {
     if (sqlite3_bind_int(statement, 4, settings.dark_theme ? 1 : 0) != SQLITE_OK) {
         return fail();
     }
+
     if (sqlite3_step(statement) != SQLITE_DONE || sqlite3_changes(_handle) != 1) {
         return fail();
     }
+
     if (sqlite3_reset(statement) != SQLITE_OK) {
         return fail();
     }
+
     return true;
 }

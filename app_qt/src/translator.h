@@ -1,13 +1,19 @@
 #pragma once
 
-#include <QString>
+#include <array>
+#include <string_view>
+
 #include <QObject>
+#include <QString>
 #include <QVariantList>
+#include <QtContainerFwd>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include "generated_translations.hpp"
 
+
 namespace ts {
+
 using TextId = mv::i18n::TextId;
 static constexpr auto Lang_Count = mv::i18n::languages.size();
 
@@ -22,6 +28,7 @@ bool select_system_language();
 void select_initial_language(std::string_view saved_language);
 std::string_view current_language();
 [[nodiscard]] QString get(TextId id);
+
 }  // namespace ts
 
 class Ts : public QObject {

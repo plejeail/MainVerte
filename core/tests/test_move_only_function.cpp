@@ -3,8 +3,10 @@
 #include <type_traits>
 #include <utility>
 
-#include "move_only_function.h"
-#include "doctest.h"
+#include <doctest.h>
+
+#include "mv_move_only_function.h"
+
 
 static_assert(!std::is_copy_constructible_v<mv::MoveOnlyFunction<void()>>);
 static_assert(!std::is_copy_assignable_v<mv::MoveOnlyFunction<void()>>);

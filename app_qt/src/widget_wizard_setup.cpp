@@ -1,8 +1,13 @@
 #include "widget_wizard_setup.h"
 
+#include <cstddef>
+
 #include <QDebug>
 #include <QPointer>
+#include <QVariantList>
 
+#include "mv_core.h"
+#include "mv_definitions.h"
 #include "mvlog/mvlog.h"
 #include "translator.h"
 
@@ -23,7 +28,7 @@ void SetupWizard::selectLanguage(int index) {
 
     const auto code = codes[index];
     if (ts::select_language(code)) {
-        _chosen_language = QString::fromUtf8(code.data(), code.size());
+        _chosen_language = QString::fromUtf8(code.data(), static_cast<int>(code.size()));
         emit languageChanged();
     }
 }

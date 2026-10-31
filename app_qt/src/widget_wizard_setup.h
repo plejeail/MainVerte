@@ -4,7 +4,8 @@
 #include <QString>
 #include <QVariantList>
 
-#include "mainverte_core.h"
+#include "mv_core.h"
+
 
 /// Creates and selects a gardener atomically through Core services.
 class SetupWizard final : public QObject {
