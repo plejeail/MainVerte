@@ -8,6 +8,19 @@ Page {
     id: settingsPage
 
     required property var settings
+    property int versionClicks: 0
+
+    function versionClicked() {
+        if (settings.saving || settings.debugEnabled) {
+            return;
+        }
+
+        versionClicks += 1;
+        if (versionClicks === 5) {
+            versionClicks = 0;
+            settings.selectDebugEnabled(true);
+        }
+    }
 
     title: Ts.get(TextId.Parameters_Title)
 
@@ -110,12 +123,35 @@ Page {
             wrapMode: Text.WordWrap
         }
 
+        Label {
+            Layout.fillWidth: true
+            objectName: "softwareVersion"
+            text: Ts.get(TextId.Settings_SoftwareVersion).arg(settingsPage.settings.softwareVersion)
+            wrapMode: Text.WordWrap
+
+            TapHandler {
+                onTapped: settingsPage.versionClicked()
+            }
+        }
+
+        Label {
+            Layout.fillWidth: true
+            objectName: "databaseVersion"
+            text: Ts.get(TextId.Settings_DatabaseVersion).arg(settingsPage.settings.databaseVersion)
+            wrapMode: Text.WordWrap
+
+            TapHandler {
+                onTapped: settingsPage.versionClicked()
+            }
+        }
+
         GroupBox {
             id: debugBox
 
             Layout.fillWidth: true
+            objectName: "debugBox"
             title: "-- DEBUG OPTIONS --"
-            visible: true
+            visible: settingsPage.settings.debugEnabled
 
             ColumnLayout {
                 anchors.left: parent.left
@@ -123,6 +159,18 @@ Page {
                 anchors.right: parent.right
                 anchors.top: parent.top
                 spacing: 12
+
+                CheckBox {
+                    checked: settingsPage.settings.debugEnabled
+                    enabled: !settingsPage.settings.saving
+                    objectName: "debugEnabledCheckbox"
+                    text: "Enable debug options"
+
+                    onClicked: {
+                        settingsPage.versionClicks = 0;
+                        settingsPage.settings.selectDebugEnabled(checked);
+                    }
+                }
 
                 Label {
                     font.bold: true

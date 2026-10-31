@@ -15,6 +15,7 @@
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
 #include "mv_settings.h"
+#include "sql_scripts.hpp"
 #include "tools.h"
 
 
@@ -71,6 +72,10 @@ bool mv::Services::initialize(std::string_view database_path) {
 
 mv::Services::~Services() {
     services_instance.reset();
+}
+
+int mv::database_version() {
+    return static_cast<int>(mv::sql::scripts.size());
 }
 
 mv::Settings mv::settings() {

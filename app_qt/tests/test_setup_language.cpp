@@ -329,6 +329,85 @@ TEST_CASE("theme applies immediately and persists across restarts without changi
     }
 }
 
+TEST_CASE("debug visibility unlocks after five version clicks and persists both states") {
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    const auto path = (directory.path() + "/debug.db").toStdString();
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        AppSettings settings;
+        CHECK_FALSE(settings.debugEnabled());
+        CHECK(settings.softwareVersion() == "0.1.0");
+        CHECK(settings.databaseVersion() == mv::database_version());
+        QQmlEngine engine;
+        QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
+        REQUIRE(source.open(QIODevice::ReadOnly));
+        QQmlComponent component(&engine);
+        component.setData(source.readAll().replace("import QtQuick\r\n", "import QtQuick\n")
+                              .replace("import QtQuick\n", "import WizardTest\nimport QtQuick\n"), QUrl());
+        if (component.isLoading()) {
+            QEventLoop loading;
+            QObject::connect(&component, &QQmlComponent::statusChanged, &loading, &QEventLoop::quit);
+            QTimer::singleShot(5000, &loading, &QEventLoop::quit);
+            loading.exec();
+        }
+
+        REQUIRE_MESSAGE(component.isReady(), component.errorString().toStdString());
+        std::unique_ptr<QObject> page(component.createWithInitialProperties({{"settings", QVariant::fromValue(&settings)}}));
+        REQUIRE(page);
+        auto* debug = page->findChild<QObject*>("debugBox");
+        REQUIRE(debug);
+        CHECK_FALSE(debug->property("visible").toBool());
+        for (int click = 0; click < 4; ++click) {
+            REQUIRE(QMetaObject::invokeMethod(page.get(), "versionClicked"));
+            CHECK_FALSE(settings.debugEnabled());
+        }
+
+        QEventLoop saving;
+        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+            if (!settings.saving()) {
+                saving.quit();
+            }
+        });
+        QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+        REQUIRE(QMetaObject::invokeMethod(page.get(), "versionClicked"));
+        CHECK(settings.debugEnabled());
+        CHECK(debug->property("visible").toBool());
+        settings.selectDebugEnabled(false); // Ignore changes while the write is pending.
+        CHECK(settings.debugEnabled());
+        saving.exec();
+        REQUIRE_FALSE(settings.saving());
+        REQUIRE_FALSE(settings.saveFailed());
+        CHECK(mv::settings().debug_enabled);
+    }
+
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        AppSettings settings;
+        REQUIRE(settings.debugEnabled());
+        QEventLoop saving;
+        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+            if (!settings.saving()) {
+                saving.quit();
+            }
+        });
+        QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+        settings.selectDebugEnabled(false);
+        saving.exec();
+        REQUIRE_FALSE(settings.saving());
+        REQUIRE_FALSE(settings.saveFailed());
+    }
+
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        AppSettings settings;
+        CHECK_FALSE(settings.debugEnabled());
+    }
+}
+
 int main(int argc, char** argv) {
     QGuiApplication application(argc, argv);
     qmlRegisterSingletonType<Ts>("WizardTest", 1, 0, "Ts",
