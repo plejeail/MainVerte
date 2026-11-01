@@ -1,0 +1,42 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    name: Core C++23
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: >
+          cmake -S . -B build/ci
+          -DCMAKE_BUILD_TYPE=Debug
+          -DBUILD_QT_APP=OFF
+          -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build build/ci --parallel 2 --target mainverte_core_tests
+
+      - name: Core tests
+        run: >
+          ctest --test-dir build/ci
+          --output-on-failure
+          --no-tests=error
+          -R '^mainverte_core_tests$'
+
+      - name: Translation generator tests
+        run: python3 -B tools/tests/test_generate_translations.py
