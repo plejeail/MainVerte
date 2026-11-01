@@ -99,11 +99,14 @@ bool save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callba
 /// submissions, are delivered through the same dispatcher. The name is owned by Core.
 bool create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback);
 
-/// Atomically creates and selects a gardener, clearing the current collection.
-/// Updates the in-memory selection on the owner thread before delivering success.
+/// Atomically creates and selects a gardener, clears the collection and saves language.
+/// An empty language stores the system preference. Core owns both input strings.
+/// Returns job acceptance, not persistence success; the callback receives the result
+/// after commit or rollback. Updates the selection and language cache on the owner
+/// thread before delivering success.
 /// Requires initialized Services, an owner-thread call and a nonempty callback.
 /// Empty names return false without a callback, as for create_gardener(). Other
 /// errors are delivered through platform::dispatch_callback; false means refused.
-bool create_and_select_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback);
+bool complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback);
 
 }  // namespace mv

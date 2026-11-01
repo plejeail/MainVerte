@@ -50,7 +50,7 @@ TEST_CASE("wizard language is transient until gardener submission and survives r
         });
         QObject::connect(&wizard, &SetupWizard::failed, &loop, [&](const QString&) { loop.quit(); });
         QTimer::singleShot(5000, &loop, &QEventLoop::quit);
-        wizard.createGardener(" Camille ");
+        wizard.complete_setup(" Camille ");
         CHECK(wizard.busy());
         loop.exec();
         REQUIRE(created);
@@ -150,7 +150,7 @@ TEST_CASE("settings language applies immediately and persists without changing t
         REQUIRE(services.initialize(path));
         QEventLoop creation;
         QTimer::singleShot(5000, &creation, &QEventLoop::quit);
-        REQUIRE(mv::create_and_select_gardener("Camille", [&](mv::GardenerResult result) {
+        REQUIRE(mv::complete_setup("Camille", "", [&](mv::GardenerResult result) {
             REQUIRE(result);
             gardener_id = result->id;
             creation.quit();
@@ -286,7 +286,7 @@ TEST_CASE("setup page uses its injected wizard for language selection and errors
     CHECK(wizard.languageIndex() == 1);
     CHECK(selector->property("currentIndex").toInt() == 1);
     CHECK(mv::settings().language.empty());
-    wizard.createGardener("");
+    wizard.complete_setup("");
     CHECK(page->property("errorMessage").toString() == ts::get(ts::TextId::Gardener_NameRequired));
 }
 

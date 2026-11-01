@@ -7,7 +7,7 @@
 #include "mv_core.h"
 
 
-/// Creates and selects a gardener atomically through Core services.
+/// Completes gardener setup atomically through Core services.
 class SetupWizard final : public QObject {
     Q_OBJECT
     Q_PROPERTY(QVariantList languages READ languages CONSTANT)
@@ -22,7 +22,7 @@ public:
     [[nodiscard]] QVariantList languages() const;
     [[nodiscard]] int languageIndex() const;
     Q_INVOKABLE void selectLanguage(int index);
-    Q_INVOKABLE void createGardener(const QString& name);
+    Q_INVOKABLE void complete_setup(const QString& name);
 
 signals:
     void languageChanged();
@@ -36,5 +36,4 @@ private:
     bool    _busy = false;
     mv::Services& _services;
     QString _chosen_language;
-    QString _created_name;
 };
