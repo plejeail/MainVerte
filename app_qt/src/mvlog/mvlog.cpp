@@ -77,6 +77,10 @@ mvlog::InitResult mvlog::init(const char* logfile_path, std::size_t max_size_kB,
 }
 
 void mvlog::detail::write(const mvlog::Level level, const std::string_view message) {
+    if (!enabled(level)) {
+        return;
+    }
+
     auto& log = log_state();
     const std::lock_guard lock(log.mutex);
     std::tm date{};

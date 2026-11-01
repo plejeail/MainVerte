@@ -80,3 +80,20 @@ add_test(NAME mainverte_style COMMAND mainverte_style_tests)
 set_tests_properties(mainverte_style PROPERTIES
     TIMEOUT 60
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software")
+
+foreach(log_switch_case IN ITEMS disabled partial)
+    add_executable(mainverte_log_switches_${log_switch_case} test_log_switches.cpp)
+    target_link_libraries(mainverte_log_switches_${log_switch_case} PRIVATE
+        doctest::doctest_with_main project_warnings)
+    if(log_switch_case STREQUAL "disabled")
+        target_compile_definitions(mainverte_log_switches_${log_switch_case} PRIVATE MV_LOG_DISABLED=1)
+    else()
+        target_compile_definitions(mainverte_log_switches_${log_switch_case} PRIVATE
+            MV_LOG_ENABLE_DBG=0 MV_LOG_ENABLE_WRN=0)
+    endif()
+    add_test(NAME mainverte_log_switches_${log_switch_case} COMMAND mainverte_log_switches_${log_switch_case})
+    if(MINGW)
+        set_tests_properties(mainverte_log_switches_${log_switch_case} PROPERTIES
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${log_test_runtime_directory}")
+    endif()
+endforeach()

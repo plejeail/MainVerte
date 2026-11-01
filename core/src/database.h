@@ -20,8 +20,8 @@
 #pragma once
 
 #include <condition_variable>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -30,9 +30,9 @@
 #include <string_view>
 #include <thread>
 
-#include "mv_settings.h"
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
+#include "mv_settings.h"
 
 
 struct sqlite3;
@@ -59,7 +59,7 @@ public:
     bool submit(Job job);
 
     int64_t create_gardener(const std::string& name);
-    mv::GardenerResult create_and_select_gardener(const std::string& name);
+    mv::GardenerResult complete_setup(const std::string& name, const std::string& language);
 
     // Use before start() on the owner thread, or on the worker after start().
     std::optional<mv::Settings> read_settings();

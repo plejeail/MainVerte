@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <cassert>
 #include <chrono>
 #include <cstddef>
@@ -7,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <format>
+#include <functional>
 #include <ratio>
 #include <string>
 #include <string_view>

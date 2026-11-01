@@ -1,5 +1,5 @@
-#include "services.h"
 #include "mv_core.h"
+#include "services.h"
 
 #include <cassert>
 #include <expected>
@@ -107,7 +107,7 @@ bool mv::save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> ca
     return accepted;
 }
 
-bool mv::create_and_select_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback) {
+bool mv::complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback) {
     assert(services_instance != nullptr);
     assert(callback);
     if (name.empty()) {
@@ -117,12 +117,13 @@ bool mv::create_and_select_gardener(std::string name, MoveOnlyFunction<void(Gard
 
     auto completion = std::make_shared<MoveOnlyFunction<void(GardenerResult)>>(std::move(callback));
     const bool accepted = service::database().submit(
-    [name = std::move(name), completion](sqlite3*) {
-        auto result = service::database().create_and_select_gardener(name);
-        mv::platform::dispatch_callback([result = std::move(result), completion]() mutable {
+    [name = std::move(name), language = std::move(language), completion](sqlite3*) {
+        auto result = service::database().complete_setup(name, language);
+        mv::platform::dispatch_callback([result = std::move(result), language, completion]() mutable {
             if (result && services_instance) {
                 services_instance->settings.current_gardener_id = result->id;
                 services_instance->settings.current_collection_id = 0;
+                services_instance->settings.language = language;
             }
 
             (*completion)(std::move(result));

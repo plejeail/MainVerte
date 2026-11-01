@@ -1,5 +1,9 @@
 // clazy:skip
 #define DOCTEST_CONFIG_IMPLEMENT
+#include <array>
+#include <memory>
+#include <string>
+
 #include <QDir>
 #include <QEventLoop>
 #include <QFile>
@@ -11,10 +15,11 @@
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QVariant>
-
 #include <doctest.h>
+#include <sqlite3.h>
 
 #include "app_settings.h"
+#include "mvlog/mvlog.h"
 #include "translator.h"
 #include "widget_wizard_setup.h"
 
@@ -50,7 +55,7 @@ TEST_CASE("wizard language is transient until gardener submission and survives r
         });
         QObject::connect(&wizard, &SetupWizard::failed, &loop, [&](const QString&) { loop.quit(); });
         QTimer::singleShot(5000, &loop, &QEventLoop::quit);
-        wizard.createGardener(" Camille ");
+        wizard.complete_setup(" Camille ");
         CHECK(wizard.busy());
         loop.exec();
         REQUIRE(created);
@@ -150,7 +155,7 @@ TEST_CASE("settings language applies immediately and persists without changing t
         REQUIRE(services.initialize(path));
         QEventLoop creation;
         QTimer::singleShot(5000, &creation, &QEventLoop::quit);
-        REQUIRE(mv::create_and_select_gardener("Camille", [&](mv::GardenerResult result) {
+        REQUIRE(mv::complete_setup("Camille", "", [&](mv::GardenerResult result) {
             REQUIRE(result);
             gardener_id = result->id;
             creation.quit();
@@ -286,7 +291,7 @@ TEST_CASE("setup page uses its injected wizard for language selection and errors
     CHECK(wizard.languageIndex() == 1);
     CHECK(selector->property("currentIndex").toInt() == 1);
     CHECK(mv::settings().language.empty());
-    wizard.createGardener("");
+    wizard.complete_setup("");
     CHECK(page->property("errorMessage").toString() == ts::get(ts::TextId::Gardener_NameRequired));
 }
 
@@ -405,6 +410,200 @@ TEST_CASE("debug visibility unlocks after five version clicks and persists both 
         REQUIRE(services.initialize(path));
         AppSettings settings;
         CHECK_FALSE(settings.debugEnabled());
+    }
+}
+
+TEST_CASE("failed language writes retain the saved preference across restart and allow retry") {
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    const auto path = (directory.path() + "/language-failure.db").toStdString();
+    std::string previous_preference;
+    SUBCASE("automatic preference") {}
+    SUBCASE("explicit preference") { previous_preference = "fr"; }
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        auto snapshot = mv::settings();
+        snapshot.language = previous_preference;
+        QEventLoop saving;
+        bool saved = false;
+        REQUIRE(mv::save_settings(snapshot, [&](bool success) {
+            saved = success;
+            saving.quit();
+        }));
+        QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+        saving.exec();
+        REQUIRE(saved);
+    }
+
+    // Change the fixture only while Services is stopped: SQLite is single-threaded.
+    {
+        sqlite3* raw = nullptr;
+        const int opened = sqlite3_open(path.c_str(), &raw);
+        std::unique_ptr<sqlite3, decltype(&sqlite3_close)> database(raw, &sqlite3_close);
+        REQUIRE(opened == SQLITE_OK);
+        REQUIRE(sqlite3_exec(database.get(),
+            "CREATE TRIGGER reject_language BEFORE UPDATE ON settings BEGIN "
+            "SELECT RAISE(ABORT, 'language write rejected'); END;",
+            nullptr, nullptr, nullptr) == SQLITE_OK);
+    }
+
+    ts::select_initial_language(previous_preference);
+    const std::string previous_effective(ts::current_language());
+    const int previous_index = ts::language_index();
+    const int requested_index = (previous_index + 1) % static_cast<int>(ts::Lang_Count);
+    const std::string requested_language(ts::list_languages()[requested_index]);
+    for (int attempt = 0; attempt < 2; ++attempt) {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        CHECK(mv::settings().language == previous_preference);
+        AppSettings settings;
+        QEventLoop saving;
+        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+            if (!settings.saving()) {
+                saving.quit();
+            }
+        });
+        QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+        settings.selectLanguage(requested_index);
+        CHECK(settings.saving());
+        CHECK(ts::current_language() == requested_language);
+        settings.selectLanguage(previous_index);
+        saving.exec();
+        REQUIRE_FALSE(settings.saving());
+        CHECK(settings.saveFailed());
+        CHECK(settings.languageIndex() == previous_index);
+        CHECK(ts::current_language() == previous_effective);
+        CHECK(mv::settings().language == previous_preference);
+    }
+
+    {
+        sqlite3* raw = nullptr;
+        const int opened = sqlite3_open(path.c_str(), &raw);
+        std::unique_ptr<sqlite3, decltype(&sqlite3_close)> database(raw, &sqlite3_close);
+        REQUIRE(opened == SQLITE_OK);
+        REQUIRE(sqlite3_exec(database.get(), "DROP TRIGGER reject_language;",
+            nullptr, nullptr, nullptr) == SQLITE_OK);
+    }
+
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        CHECK(mv::settings().language == previous_preference);
+        AppSettings settings;
+        QEventLoop saving;
+        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+            if (!settings.saving()) {
+                saving.quit();
+            }
+        });
+        QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+        settings.selectLanguage(requested_index);
+        saving.exec();
+        REQUIRE_FALSE(settings.saving());
+        CHECK_FALSE(settings.saveFailed());
+        CHECK(mv::settings().language == requested_language);
+        CHECK(ts::current_language() == requested_language);
+    }
+
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        CHECK(mv::settings().language == requested_language);
+    }
+}
+
+TEST_CASE("log threshold and selector follow saved settings across navigation and restart") {
+    QTemporaryDir directory;
+    REQUIRE(directory.isValid());
+    const auto path = (directory.path() + "/log-level.db").toStdString();
+    int previous = 0;
+    const std::array levels{mvlog::Level::Debug, mvlog::Level::Info, mvlog::Level::Warning, mvlog::Level::Error};
+    for (const int index : {1, 3, 2, 0}) {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        CHECK(static_cast<int>(mv::settings().log_level) == previous);
+        mvlog::set_level(mvlog::Level::Error);
+        AppSettings settings;
+        CHECK(settings.logLevel() == previous);
+        CHECK(mvlog::level() == levels[previous]);
+        QEventLoop saving;
+        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+            if (!settings.saving()) {
+                saving.quit();
+            }
+        });
+        QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+        settings.selectLogLevel(index);
+        CHECK(settings.saving());
+        CHECK(settings.logLevel() == index);
+        CHECK(mvlog::level() == levels[index]);
+        settings.selectLogLevel(previous);
+        saving.exec();
+        REQUIRE_FALSE(settings.saving());
+        CHECK_FALSE(settings.saveFailed());
+        CHECK(static_cast<int>(mv::settings().log_level) == index);
+        QQmlEngine engine;
+        QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
+        REQUIRE(source.open(QIODevice::ReadOnly));
+        QQmlComponent component(&engine);
+        component.setData(source.readAll().replace("import QtQuick\r\n", "import QtQuick\n")
+            .replace("import QtQuick\n", "import WizardTest\nimport QtQuick\n"), QUrl());
+        if (component.isLoading()) {
+            QEventLoop loading;
+            QObject::connect(&component, &QQmlComponent::statusChanged, &loading, &QEventLoop::quit);
+            QTimer::singleShot(5000, &loading, &QEventLoop::quit);
+            loading.exec();
+        }
+
+        REQUIRE_MESSAGE(component.isReady(), component.errorString().toStdString());
+        for (int visit = 0; visit < 2; ++visit) {
+            std::unique_ptr<QObject> page(component.createWithInitialProperties({{"settings", QVariant::fromValue(&settings)}}));
+            REQUIRE(page);
+            auto* selector = page->findChild<QObject*>("logSelector");
+            REQUIRE(selector);
+            CHECK(selector->property("currentIndex").toInt() == index);
+        }
+
+        previous = index;
+    }
+
+    // Inject a real SQLite failure with Core stopped, then exercise the app callback.
+    {
+        sqlite3* raw = nullptr;
+        const int opened = sqlite3_open(path.c_str(), &raw);
+        std::unique_ptr<sqlite3, decltype(&sqlite3_close)> database(raw, &sqlite3_close);
+        REQUIRE(opened == SQLITE_OK);
+        REQUIRE(sqlite3_exec(database.get(),
+            "CREATE TRIGGER reject_log_level BEFORE UPDATE ON settings BEGIN "
+            "SELECT RAISE(ABORT, 'log level rejected'); END;", nullptr, nullptr, nullptr) == SQLITE_OK);
+    }
+
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        AppSettings settings;
+        CHECK(settings.logLevel() == 0);
+        QEventLoop saving;
+        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+            if (!settings.saving()) {
+                saving.quit();
+            }
+        });
+        QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+        settings.selectLogLevel(3);
+        saving.exec();
+        REQUIRE_FALSE(settings.saving());
+        CHECK(settings.saveFailed());
+        CHECK(settings.logLevel() == 0);
+        CHECK(mvlog::level() == mvlog::Level::Debug);
+        CHECK(mv::settings().log_level == mv::LogLevel::Dbg);
+    }
+
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        CHECK(mv::settings().log_level == mv::LogLevel::Dbg);
     }
 }
 

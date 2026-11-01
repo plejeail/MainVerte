@@ -137,7 +137,23 @@ if(BUILD_TESTING)
         img/flag_en.svg img/flag_fr.svg img/flag_de.svg img/flag_es.svg)
     target_include_directories(mainverte_setup_tests PRIVATE src "${CMAKE_CURRENT_BINARY_DIR}/generated")
     add_dependencies(mainverte_setup_tests appMainVerte)
-    target_link_libraries(mainverte_setup_tests PRIVATE Qt6::Quick mainverte_core mainverte_mvlog doctest::doctest project_warnings)
+    target_link_libraries(mainverte_setup_tests PRIVATE Qt6::Quick mainverte_core mainverte_mvlog sqlite3_vendor doctest::doctest project_warnings)
+    # Link the app boundary against a controlled Core completion provider so queue
+    # refusal can be verified without changing the production service lifecycle.
+    qt_add_executable(mainverte_settings_language_tests
+        "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_translations.hpp"
+        tests/test_settings_language.cpp
+        src/app_settings.cpp src/app_settings.h
+        src/translator.cpp src/translator.h)
+    target_include_directories(mainverte_settings_language_tests PRIVATE
+        src "${CMAKE_CURRENT_BINARY_DIR}/generated" "${PROJECT_SOURCE_DIR}/core/include")
+    add_dependencies(mainverte_settings_language_tests appMainVerte)
+    target_link_libraries(mainverte_settings_language_tests PRIVATE
+        Qt6::Quick mainverte_mvlog doctest::doctest project_warnings)
+    qt_add_resources(mainverte_settings_language_tests "settings_test_flags" PREFIX "/" FILES
+        img/flag_en.svg img/flag_fr.svg img/flag_de.svg img/flag_es.svg)
+    add_test(NAME settings_language_completion COMMAND mainverte_settings_language_tests)
+    set_tests_properties(settings_language_completion PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     foreach(locale IN ITEMS fr_FR en_GB de_DE es_ES)
         add_test(NAME setup_language_${locale} COMMAND mainverte_setup_tests)
         set_tests_properties(setup_language_${locale} PROPERTIES

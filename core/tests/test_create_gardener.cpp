@@ -15,8 +15,8 @@
 #include <sqlite3.h>
 
 #include "database.h"
-#include "mv_definitions.h"
 #include "mv_core.h"
+#include "mv_definitions.h"
 #include "mv_move_only_function.h"
 #include "services.h"
 
@@ -176,7 +176,41 @@ TEST_CASE("create_gardener persists names and dispatches success and database er
     CHECK(calls == 4);
 }
 
-TEST_CASE("Atomic gardener creation restores selection on restart") {
+TEST_CASE("Setup refuses an empty name without scheduling a completion") {
+    mv::Services services;
+    REQUIRE(services.initialize(":memory:"));
+    bool called = false;
+    CHECK_FALSE(mv::complete_setup("", "fr", [&](mv::GardenerResult) { called = true; }));
+    REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+    deliver_completions();
+    CHECK_FALSE(called);
+    CHECK(mv::settings().current_gardener_id == 0);
+    CHECK(mv::settings().language.empty());
+}
+
+TEST_CASE("Setup preserves the system language preference and creates no collection") {
+    mv::Services services;
+    REQUIRE(services.initialize(":memory:"));
+    std::optional<mv::GardenerResult> received;
+    REQUIRE(mv::complete_setup("Alice", "", [&](mv::GardenerResult result) {
+        received = std::move(result);
+    }));
+    REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+    CHECK_FALSE(received.has_value());
+    deliver_completions();
+    REQUIRE(received.has_value());
+    REQUIRE(received->has_value());
+    CHECK(mv::settings().language.empty());
+    CHECK(mv::settings().current_gardener_id == received->value().id);
+    CHECK(mv::settings().current_collection_id == 0);
+    REQUIRE(execute_on_worker(
+        "CREATE TEMP TABLE verify_setup(value INTEGER CHECK(value=1));"
+        "INSERT INTO verify_setup SELECT count(*)=1 FROM gardener;"
+        "INSERT INTO verify_setup SELECT count(*)=0 FROM collection;"
+        "INSERT INTO verify_setup SELECT language='' FROM settings;") == SQLITE_OK);
+}
+
+TEST_CASE("Atomic setup restores selection on restart") {
     const auto directory = std::filesystem::temp_directory_path() / std::format(
         "mainverte-selection-{}", std::chrono::steady_clock::now().time_since_epoch().count());
     struct Cleanup {
@@ -192,7 +226,7 @@ TEST_CASE("Atomic gardener creation restores selection on restart") {
         CHECK(mv::settings().current_gardener_id == 0);
         std::optional<mv::GardenerResult> result;
         auto callback = [&](mv::GardenerResult value) { result = std::move(value); };
-        REQUIRE(mv::create_and_select_gardener("Alice", callback));
+        REQUIRE(mv::complete_setup("Alice", "de", callback));
         REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
         CHECK(mv::settings().current_gardener_id == 0);
         deliver_completions();
@@ -200,6 +234,7 @@ TEST_CASE("Atomic gardener creation restores selection on restart") {
         REQUIRE(result->has_value());
         selected = result->value().id;
         CHECK(mv::settings().current_gardener_id == selected);
+        CHECK(mv::settings().language == "de");
         CHECK(mv::settings().current_collection_id == 0);
         REQUIRE(execute_on_worker(
             "CREATE TRIGGER reject_selection BEFORE UPDATE ON settings BEGIN "
@@ -211,11 +246,13 @@ TEST_CASE("Atomic gardener creation restores selection on restart") {
         REQUIRE(saved.has_value());
         CHECK_FALSE(*saved);
         CHECK(mv::settings().current_gardener_id == selected);
+        CHECK(mv::settings().language == "de");
     }
     {
         mv::Services services;
         REQUIRE(services.initialize(filename));
         CHECK(mv::settings().current_gardener_id == selected);
+        CHECK(mv::settings().language == "de");
         REQUIRE(execute_on_worker("DROP TRIGGER reject_selection; DELETE FROM gardener WHERE display_name='Alice'") == SQLITE_OK);
     }
     {
@@ -233,9 +270,17 @@ TEST_CASE("Atomic gardener creation restores selection on restart") {
     }
 }
 
-TEST_CASE("Atomic gardener creation rolls back failures and allows retry with another name") {
-    mv::Services services;
-    REQUIRE(services.initialize(":memory:"));
+TEST_CASE("Atomic setup rolls back failures and allows retry with another name") {
+    const auto directory = std::filesystem::temp_directory_path() / std::format(
+        "mainverte-setup-failure-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code error; std::filesystem::remove_all(path, error); }
+    } cleanup{directory};
+    const auto utf8 = (directory / "database.db").u8string();
+    const std::string filename(utf8.begin(), utf8.end());
+    std::optional<mv::Services> services;
+    REQUIRE(services.emplace().initialize(filename));
     REQUIRE(execute_on_worker(
         "INSERT INTO gardener VALUES(42, 'Seed', 123);"
         "INSERT INTO collection VALUES(73, 42, 'Collection', 123, 123);") == SQLITE_OK);
@@ -247,23 +292,29 @@ TEST_CASE("Atomic gardener creation rolls back failures and allows retry with an
     REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
     deliver_completions();
 
+    std::string stage;
     SUBCASE("Insertion failure") {
+        stage = "insert";
         REQUIRE(execute_on_worker(
             "CREATE TRIGGER reject_operation BEFORE INSERT ON gardener BEGIN "
             "SELECT RAISE(ABORT, 'insertion rejected'); END;") == SQLITE_OK);
     }
-    SUBCASE("Selection failure") {
+    SUBCASE("Settings update failure") {
+        stage = "write settings";
         REQUIRE(execute_on_worker(
             "CREATE TRIGGER reject_operation BEFORE UPDATE ON settings BEGIN "
             "SELECT RAISE(ABORT, 'selection rejected'); END;") == SQLITE_OK);
     }
     SUBCASE("Commit failure from a deferred foreign key") {
+        stage = "commit";
         REQUIRE(execute_on_worker(
-            "PRAGMA defer_foreign_keys=ON;"
+            "CREATE TABLE deferred_setup_check(gardener_id INTEGER REFERENCES gardener(id) "
+            "DEFERRABLE INITIALLY DEFERRED);"
             "CREATE TRIGGER reject_operation AFTER UPDATE ON settings BEGIN "
-            "INSERT INTO collection VALUES(74, 999, 'Invalid', 123, 123); END;") == SQLITE_OK);
+            "INSERT INTO deferred_setup_check VALUES(999); END;") == SQLITE_OK);
     }
     SUBCASE("Missing settings row") {
+        stage = "read settings";
         REQUIRE(execute_on_worker("DELETE FROM settings;") == SQLITE_OK);
     }
 
@@ -279,14 +330,15 @@ TEST_CASE("Atomic gardener creation rolls back failures and allows retry with an
         }
         received = std::move(result);
     };
-    REQUIRE(mv::create_and_select_gardener("Alice", callback));
+    REQUIRE(mv::complete_setup("Alice", "de", callback));
     REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
     CHECK(calls == 0);
     deliver_completions();
     REQUIRE(received.has_value());
     REQUIRE_FALSE(received->has_value());
     CHECK(received->error().code == mv::MainverteError::Code::Database);
-    CHECK_FALSE(received->error().message.empty());
+    INFO(received->error().message);
+    CHECK(received->error().message.find("(" + stage + ")") != std::string::npos);
     CHECK(calls == 1);
     CHECK(mv::settings().current_gardener_id == 42);
     CHECK(mv::settings().current_collection_id == 73);
@@ -299,12 +351,17 @@ TEST_CASE("Atomic gardener creation rolls back failures and allows retry with an
         "CREATE TRIGGER check_rollback BEFORE INSERT ON gardener BEGIN "
         "SELECT CASE WHEN (SELECT count(*) FROM gardener) != 1 "
         "OR NOT EXISTS(SELECT 1 FROM settings WHERE current_gardener_id=42 "
-        "AND current_collection_id=73) "
+        "AND current_collection_id=73 AND language='fr') "
         "OR (SELECT count(*) FROM collection) != 1 "
         "THEN RAISE(ABORT, 'rollback incomplete') END; END;") == SQLITE_OK);
+    services.reset();
+    REQUIRE(services.emplace().initialize(filename));
+    CHECK(mv::settings().current_gardener_id == 42);
+    CHECK(mv::settings().current_collection_id == 73);
+    CHECK(mv::settings().language == "fr");
     received.reset();
     const std::string name = "Bob'); DROP TABLE gardener; --";
-    REQUIRE(mv::create_and_select_gardener(name, callback));
+    REQUIRE(mv::complete_setup(name, "es", callback));
     REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
     CHECK(mv::settings().current_gardener_id == 42);
     deliver_completions();
@@ -312,5 +369,14 @@ TEST_CASE("Atomic gardener creation rolls back failures and allows retry with an
     REQUIRE(received->has_value());
     CHECK(received->value().name == name);
     CHECK(calls == 2);
-    CHECK(mv::settings().language == "fr");
+    CHECK(mv::settings().language == "es");
+    REQUIRE(execute_on_worker(
+        "CREATE TEMP TABLE verify_setup(value INTEGER CHECK(value=1));"
+        "INSERT INTO verify_setup SELECT count(*)=2 FROM gardener;"
+        "INSERT INTO verify_setup SELECT count(*)=1 FROM collection;") == SQLITE_OK);
+    services.reset();
+    REQUIRE(services.emplace().initialize(filename));
+    CHECK(mv::settings().current_gardener_id == received->value().id);
+    CHECK(mv::settings().current_collection_id == 0);
+    CHECK(mv::settings().language == "es");
 }

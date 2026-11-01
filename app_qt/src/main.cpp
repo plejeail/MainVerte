@@ -85,14 +85,14 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
 
     auto settings = mv::settings();
 
-    ts::select_initial_language(settings.language);
-    mvlog::inf("ts language selected: {}", ts::current_language());
-
     QQmlApplicationEngine engine;
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app,    &on_object_creation_failed,
                      Qt::QueuedConnection);
+    // AppSettings applies the loaded log threshold before other startup logging.
     auto* app_settings = new AppSettings(&engine);
+    ts::select_initial_language(settings.language);
+    mvlog::inf("ts language selected: {}", ts::current_language());
     QObject::connect(app_settings, &AppSettings::languageChanged,
                      &engine,      &QQmlEngine::retranslate);
     engine.setInitialProperties({{QStringLiteral("settings"), QVariant::fromValue(app_settings)}});

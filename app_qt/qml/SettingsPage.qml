@@ -181,7 +181,7 @@ Page {
                     Accessible.name: "log level"
                     Layout.fillWidth: true
                     Layout.maximumWidth: 360
-                    currentIndex: 0
+                    currentIndex: settingsPage.settings.logLevel
                     enabled: !settingsPage.settings.saving
                     model: ["Debug", "Info", "Warning", "Error"]
                     objectName: "logSelector"

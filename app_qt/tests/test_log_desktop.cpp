@@ -5,6 +5,7 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <vector>
 
 #ifdef _WIN32
 #include <io.h>
@@ -16,6 +17,19 @@
 
 #include "../src/mvlog/mvlog.h"
 
+
+struct CountedLogValue {
+    int* formats;
+};
+
+template <>
+struct std::formatter<CountedLogValue> : std::formatter<int> {
+    template <typename Context>
+    auto format(const CountedLogValue& value, Context& context) const {
+        ++*value.formats;
+        return std::formatter<int>::format(7, context);
+    }
+};
 
 namespace {
 
@@ -84,6 +98,12 @@ TEST_CASE("Desktop logger initializes, formats, rotates, and falls back to conso
         const auto utf8 = path.u8string();
         REQUIRE(mvlog::init(reinterpret_cast<const char*>(utf8.c_str()), 1, 2) == mvlog::InitResult::Ok);
         CHECK(mvlog::init(reinterpret_cast<const char*>(utf8.c_str()), 1, 0) == mvlog::InitResult::AlreadyInitialized);
+        mvlog::set_level(mvlog::Level::Error);
+        mvlog::dbg("filtered debug");
+        mvlog::inf("filtered info");
+        mvlog::wrn("filtered warning");
+        CHECK(read_log(path).empty());
+        mvlog::set_level(mvlog::Level::Debug);
         mvlog::dbg("answer {}", 42);
         const auto record = read_log(path);
         REQUIRE(record.size() == 26);
@@ -125,5 +145,48 @@ TEST_CASE("Desktop logger initializes, formats, rotates, and falls back to conso
     CHECK(output.find("file output disabled") != std::string::npos);
     CHECK(output.find("console survives\n") != std::string::npos);
     std::filesystem::remove_all(directory, error);
+    CHECK_FALSE(error);
+}
+
+TEST_CASE("Runtime log threshold filters every severity before formatting") {
+    CHECK(mvlog::level() == mvlog::Level::Debug);
+    const auto path = std::filesystem::temp_directory_path() / ("mvlog-threshold-" + std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count()) + ".log");
+    const std::vector levels{mvlog::Level::Debug, mvlog::Level::Info, mvlog::Level::Warning, mvlog::Level::Error};
+    int formats = 0;
+    {
+        CaptureConsole capture(path);
+        for (int threshold = 0; threshold < 4; ++threshold) {
+            mvlog::set_level(levels[threshold]);
+            CHECK(mvlog::level() == levels[threshold]);
+            const CountedLogValue value{&formats};
+            mvlog::dbg("threshold-{}-debug {}", threshold, value);
+            mvlog::inf("threshold-{}-info {}", threshold, value);
+            mvlog::wrn("threshold-{}-warning {}", threshold, value);
+            mvlog::err("threshold-{}-error {}", threshold, value);
+            const std::string prefix = "plain-" + std::to_string(threshold);
+            mvlog::dbg(prefix + "-debug");
+            mvlog::inf(prefix + "-info");
+            mvlog::wrn(prefix + "-warning");
+            mvlog::err(prefix + "-error");
+        }
+
+        mvlog::set_level(mvlog::Level::Debug);
+    }
+
+    CHECK(formats == 10);
+    const auto output = read_log(path);
+    const std::vector<std::string> names{"debug", "info", "warning", "error"};
+    for (int threshold = 0; threshold < 4; ++threshold) {
+        for (int severity = 0; severity < 4; ++severity) {
+            const auto formatted = "threshold-" + std::to_string(threshold) + "-" + names[severity] + " 7";
+            const auto plain = "plain-" + std::to_string(threshold) + "-" + names[severity];
+            CHECK((output.find(formatted) != std::string::npos) == (severity >= threshold));
+            CHECK((output.find(plain) != std::string::npos) == (severity >= threshold));
+        }
+    }
+
+    std::error_code error;
+    std::filesystem::remove(path, error);
     CHECK_FALSE(error);
 }

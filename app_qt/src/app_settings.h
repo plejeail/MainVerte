@@ -13,6 +13,7 @@ class AppSettings final : public QObject {
     Q_PROPERTY(bool debugEnabled READ debugEnabled NOTIFY debugEnabledChanged)
     Q_PROPERTY(QString softwareVersion READ softwareVersion CONSTANT)
     Q_PROPERTY(int databaseVersion READ databaseVersion CONSTANT)
+    Q_PROPERTY(int logLevel READ logLevel NOTIFY logLevelChanged)
     Q_PROPERTY(bool saving            READ saving        NOTIFY stateChanged)
     Q_PROPERTY(bool saveFailed        READ saveFailed    NOTIFY stateChanged)
 
@@ -22,6 +23,7 @@ public:
     [[nodiscard]] QVariantList  languages()     const;
     [[nodiscard]] int           languageIndex() const;
     [[nodiscard]] bool          darkTheme()     const { return _dark_theme; }
+    [[nodiscard]] int           logLevel()     const { return _log_level; }
     [[nodiscard]] bool          saving()        const { return _saving; }
     [[nodiscard]] bool          saveFailed()    const { return _save_failed; }
 
@@ -38,9 +40,11 @@ signals:
     void languageChanged();
     void themeChanged();
     void debugEnabledChanged();
+    void logLevelChanged();
     void stateChanged();
 
 private:
+    int _log_level = 0;
     bool _debug_enabled = false;
     bool _dark_theme  = false;
     bool _saving      = false;
