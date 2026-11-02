@@ -15,7 +15,10 @@ static_assert(std::is_same_v<mv::MoveOnlyFunction<void()>, std::move_only_functi
 static_assert(!std::is_copy_constructible_v<mv::MoveOnlyFunction<void()>>);
 static_assert(!std::is_copy_assignable_v<mv::MoveOnlyFunction<void()>>);
 static_assert(std::is_nothrow_move_constructible_v<mv::MoveOnlyFunction<void()>>);
+#if !defined(_MSC_VER)
+// MSVC 19.44 reports std::move_only_function move assignment as potentially throwing.
 static_assert(std::is_nothrow_move_assignable_v<mv::MoveOnlyFunction<void()>>);
+#endif
 static_assert(!std::is_constructible_v<mv::MoveOnlyFunction<int()>, decltype([] {})>);
 
 TEST_CASE("MoveOnlyFunction represents empty and null targets") {
