@@ -15,6 +15,7 @@ target_compile_features(mainverte_core PUBLIC
 )
 
 generate_sql_resource(
+    TARGET mainverte_core
     OUTPUT_HEADER  "${CMAKE_CURRENT_BINARY_DIR}/generated/sql_scripts.hpp"
     GLOB_SQL_FILES "${CMAKE_CURRENT_SOURCE_DIR}/sql/*.sql"
     PATTERN "^([0-9]+)_.+\\.sql$"
