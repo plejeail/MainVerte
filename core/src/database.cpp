@@ -220,7 +220,7 @@ void Database::start() {
     assert(_state == State::Initialized);
 
     if (_state != State::Initialized) {
-        log_err("DB::start invalid state {}", to_string(_state));
+        log_err("DB start invalid state {}", to_string(_state));
         return;
     }
 
@@ -256,7 +256,7 @@ bool Database::initialize(const std::string& path) {
         return true;
     }
 
-    MEASURE("DB::initialize");
+    MEASURE("DB initialize");
 
     const auto directory = std::filesystem::path(std::u8string(path.begin(), path.end())).parent_path();
     if (!directory.empty()) {
@@ -373,10 +373,10 @@ int64_t Database::create_gardener(const std::string& name) {
     return sqlite3_last_insert_rowid(_handle);
 }
 
-mv::GardenerResult Database::create_and_select_gardener(const std::string& name) {
+mv::GardenerResult Database::complete_setup(const std::string& name, const std::string& language) {
     bool transaction_started = false;
     const auto fail = [this, &transaction_started](const char* stage) -> mv::GardenerResult {
-        auto message = std::format("DB: cannot create and select gardener ({}): {}",
+        auto message = std::format("DB: cannot complete setup ({}): {}",
                                    stage, sqlite3_errmsg(_handle));
         log_err(message);
         if (transaction_started && !sqlite3_get_autocommit(_handle) && !execute(_handle, "ROLLBACK;")) {
@@ -406,8 +406,9 @@ mv::GardenerResult Database::create_and_select_gardener(const std::string& name)
 
     settings->current_gardener_id = id;
     settings->current_collection_id = 0;
+    settings->language = language;
     if (!write_settings(*settings)) {
-        return fail("select");
+        return fail("write settings");
     }
 
     if (!end_transaction(_handle)) {

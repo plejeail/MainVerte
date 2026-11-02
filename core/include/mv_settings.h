@@ -24,8 +24,8 @@ struct Settings {
 
     bool        dark_theme{false};
     bool        debug_enabled{false};
-    /// Minimum log severity.
-    LogLevel    log_level{LogLevel::Inf};
+    /// Minimum log severity; Debug matches the default in existing databases.
+    LogLevel    log_level{LogLevel::Dbg};
     int64_t     current_gardener_id{Undefined};
     int64_t     current_collection_id{Undefined};
     /// Preferred language code (for example, "fr"); empty means system preference.

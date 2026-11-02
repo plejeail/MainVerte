@@ -102,6 +102,15 @@ discarded at the next rotation. Messages also go to stderr on desktop and Logcat
 (tag `MainVerte`) on Android. If file logging fails, console/Logcat output remains
 available.
 
+The runtime threshold includes Debug, Info, Warning and Error, in that order.
+Debug is the default in the logger, `mv::Settings` and SQL (value 0), preserving
+existing migration history. Existing saved levels are never reset. Before Core
+loads settings, startup diagnostics use Debug; the saved threshold is then applied
+before language initialization and UI loading. Changing the level applies it
+immediately; a failed save restores the previous threshold and selector and shows
+a save error. Compile-time switches still take precedence over runtime settings.
+Filtered formatted calls skip formatting, but C++ still evaluates their arguments.
+
 The `MV_LOG_ENABLE_DBG`, `MV_LOG_ENABLE_INF`, `MV_LOG_ENABLE_WRN`,
 `MV_LOG_ENABLE_ERR`, `MV_LOG_ENABLE_CONSOLE` and `MV_LOG_QT_TYPES_FORMAT` CMake
 options default to `ON`. `MV_LOG_DISABLED` and `MV_LOG_QT_DISABLE_QDEBUG` default

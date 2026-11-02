@@ -33,7 +33,7 @@ void SetupWizard::selectLanguage(int index) {
     }
 }
 
-void SetupWizard::createGardener(const QString& name) {
+void SetupWizard::complete_setup(const QString& name) {
     if (_busy) {
         return;
     }
@@ -54,52 +54,26 @@ void SetupWizard::createGardener(const QString& name) {
     // Core delivers the completion through platform::dispatch_callback on the
     // Qt event thread. The guarded pointer handles window/application teardown.
     const QPointer<SetupWizard> receiver(this);
-    const auto save_selection = [receiver](const QString& gardener_name) {
-        auto settings = mv::settings();
-        if (!receiver->_chosen_language.isEmpty()) {
-            settings.language = receiver->_chosen_language.toStdString();
-        }
-
-        mv::save_settings(settings, [receiver, gardener_name](bool saved) {
+    mv::complete_setup(trimmed_name.toStdString(), _chosen_language.toStdString(),
+    [receiver](mv::GardenerResult result) {
             if (!receiver) {
                 return;
             }
 
             receiver->setBusy(false);
-            if (saved) {
-                emit receiver->created(gardener_name);
-            } else {
-                emit receiver->failed(ts::get(ts::TextId::Gardener_SaveFailed));
+            if (result) {
+                emit receiver->created(QString::fromStdString(result->name));
+                return;
             }
-        });
-    };
 
-    // Retry a failed settings write without creating a second gardener.
-    if (!_created_name.isEmpty()) {
-        save_selection(_created_name);
-        return;
-    }
-
-    mv::create_and_select_gardener(trimmed_name.toStdString(),
-                        [receiver, save_selection](mv::GardenerResult result) {
-        if (!receiver) {
-            return;
+            mvlog::wrn("Gardener creation failed: {}", result.error().message);
+            if (result.error().code == mv::MainverteError::Code::NotRunning) {
+                emit receiver->failed(ts::get(ts::TextId::Gardener_ServiceUnavailable));
+            } else {
+                emit receiver->failed(ts::get(ts::TextId::Gardener_CreateFailed));
+            }
         }
-
-        if (result) {
-            receiver->_created_name = QString::fromStdString(result->name);
-            save_selection(receiver->_created_name);
-            return;
-        }
-
-        receiver->setBusy(false);
-        mvlog::wrn("Gardener creation failed: {}", result.error().message);
-        if (result.error().code == mv::MainverteError::Code::NotRunning) {
-            emit receiver->failed(ts::get(ts::TextId::Gardener_ServiceUnavailable));
-        } else {
-            emit receiver->failed(ts::get(ts::TextId::Gardener_CreateFailed));
-        }
-    });
+    );
 }
 
 void SetupWizard::setBusy(bool busy) {

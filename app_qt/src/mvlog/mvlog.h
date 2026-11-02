@@ -25,8 +25,9 @@
 #define MV_LOG_DISABLED 0
 #endif
 
-#include <cstdint>
+#include <atomic>
 #include <cstddef>
+#include <cstdint>
 #include <format>
 #include <string_view>
 #include <utility>
@@ -41,61 +42,115 @@ enum class InitResult : std::int8_t { Ok, InvalidArgument, AlreadyInitialized, F
 enum class Level : char { Debug = 'D', Info = 'I', Warning = 'W', Error = 'E' };
 
 namespace detail {
+inline std::atomic<Level> runtime_level{Level::Debug};
+
+constexpr int priority(Level level) {
+    switch (level) {
+    case Level::Debug: return 0;
+    case Level::Info: return 1;
+    case Level::Warning: return 2;
+    case Level::Error: return 3;
+    }
+
+    return 3;
+}
+
 void write(const Level lvl, const std::string_view message);
-}  // namespace detail
+}  //  namespace detail
+
+// Thread-safe threshold for all sinks. Debug is used until saved settings load.
+// In-flight writes may finish while another thread changes the threshold.
+inline void set_level(Level level) {
+    detail::runtime_level.store(level, std::memory_order_relaxed);
+}
+
+[[nodiscard]] inline Level level() {
+    return detail::runtime_level.load(std::memory_order_relaxed);
+}
+
+[[nodiscard]] inline bool enabled(Level severity) {
+    if (MV_LOG_DISABLED) {
+        return false;
+    }
+
+    switch (severity) {
+    case Level::Debug: if (!MV_LOG_ENABLE_DBG) return false; break;
+    case Level::Info: if (!MV_LOG_ENABLE_INF) return false; break;
+    case Level::Warning: if (!MV_LOG_ENABLE_WRN) return false; break;
+    case Level::Error: if (!MV_LOG_ENABLE_ERR) return false; break;
+    }
+
+    return detail::priority(severity) >= detail::priority(level());
+}
 
 inline void dbg(const std::string_view sw) {
 #if MV_LOG_ENABLE_DBG && !MV_LOG_DISABLED
-    detail::write(Level::Debug, sw);
+    if (enabled(Level::Debug)) {
+        detail::write(Level::Debug, sw);
+    }
 #endif
 }
 
 inline void inf(const std::string_view sw) {
 #if MV_LOG_ENABLE_INF && !MV_LOG_DISABLED
-    detail::write(Level::Info, sw);
+    if (enabled(Level::Info)) {
+        detail::write(Level::Info, sw);
+    }
 #endif
 }
 
 inline void wrn(const std::string_view sw) {
 #if MV_LOG_ENABLE_WRN && !MV_LOG_DISABLED
-    detail::write(Level::Warning, sw);
+    if (enabled(Level::Warning)) {
+        detail::write(Level::Warning, sw);
+    }
 #endif
 }
 
 inline void err(const std::string_view sw) {
 #if MV_LOG_ENABLE_ERR && !MV_LOG_DISABLED
-    detail::write(Level::Error, sw);
+    if (enabled(Level::Error)) {
+        detail::write(Level::Error, sw);
+    }
 #endif
 }
 
 template <typename... Args>    requires(sizeof...(Args) > 0)
 inline void dbg(std::format_string<Args...> format, Args&&... args) {
 #if MV_LOG_ENABLE_DBG && !MV_LOG_DISABLED
-    dbg(std::format(format, std::forward<Args>(args)...));
+    if (enabled(Level::Debug)) {
+        detail::write(Level::Debug, std::format(format, std::forward<Args>(args)...));
+    }
 #endif
 }
 
 template <typename... Args>    requires(sizeof...(Args) > 0)
 inline void inf(std::format_string<Args...> format, Args&&... args) {
 #if MV_LOG_ENABLE_INF && !MV_LOG_DISABLED
-    inf(std::format(format, std::forward<Args>(args)...));
+    if (enabled(Level::Info)) {
+        detail::write(Level::Info, std::format(format, std::forward<Args>(args)...));
+    }
 #endif
 }
 
 template <typename... Args>    requires(sizeof...(Args) > 0)
 inline void wrn(std::format_string<Args...> format, Args&&... args) {
 #if MV_LOG_ENABLE_WRN && !MV_LOG_DISABLED
-    wrn(std::format(format, std::forward<Args>(args)...));
+    if (enabled(Level::Warning)) {
+        detail::write(Level::Warning, std::format(format, std::forward<Args>(args)...));
+    }
 #endif
 }
 
 template <typename... Args>    requires(sizeof...(Args) > 0)
 inline void err(std::format_string<Args...> format, Args&&... args) {
 #if MV_LOG_ENABLE_ERR && !MV_LOG_DISABLED
-    err(std::format(format, std::forward<Args>(args)...));
+    if (enabled(Level::Error)) {
+        detail::write(Level::Error, std::format(format, std::forward<Args>(args)...));
+    }
 #endif
 }
-}  // namespace mvlog
+}  //  namespace mvlog
 
 #if MV_LOG_DISABLED
 inline mvlog::InitResult mvlog::init(const char* logfile_path, std::size_t max_size_kB, short max_files) {

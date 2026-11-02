@@ -33,9 +33,11 @@ TestCase {
             property bool saving: false
             property bool saveFailed: false
             property bool darkTheme: false
+            property int logLevel: 0
             property bool debugEnabled: false
             property string softwareVersion: "0.1.0"
             property int databaseVersion: 5
+            function selectLogLevel(index) { logLevel = index }
             function selectDebugEnabled(enabled) { debugEnabled = enabled }
         }
     }
@@ -132,7 +134,7 @@ TestCase {
         const settings = {
             languageIndex: 0, languages: [{label: "English", flag: ""}],
             saving: false, darkTheme: false, saveFailed: false,
-            debugEnabled: false, softwareVersion: "0.1.0", databaseVersion: 5,
+            logLevel: 0, debugEnabled: false, softwareVersion: "0.1.0", databaseVersion: 5,
             selectLanguage: function(index) { settings.selectedLanguage = index },
             selectTheme: function(dark) { settings.selectedTheme = dark }
         }
