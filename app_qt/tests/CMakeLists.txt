@@ -56,11 +56,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode"
     )
 endif()
-# Exercise the production window and its translations, without starting Core.
+# Exercise production pages against an isolated temporary Core database.
 set(app_translation_header "${CMAKE_CURRENT_BINARY_DIR}/../generated/generated_translations.hpp")
 set_source_files_properties("${app_translation_header}" PROPERTIES GENERATED TRUE)
 target_sources(mainverte_style_tests PRIVATE
-    ../src/translator.cpp ../src/translator.h "${app_translation_header}")
+    ../src/translator.cpp ../src/translator.h "${app_translation_header}"
+    ../src/plant_model.cpp ../src/plant_model.h ../src/platform.cpp)
 target_include_directories(mainverte_style_tests PRIVATE
     ../src "${CMAKE_CURRENT_BINARY_DIR}/../generated")
 add_dependencies(mainverte_style_tests appMainVerte_generate_translations)
@@ -73,7 +74,7 @@ qt_add_qml_module(mainverte_style_tests
     QML_FILES ../qml/Main.qml ../qml/CollectionPage.qml ../qml/SettingsPage.qml
 )
 target_link_libraries(mainverte_style_tests PRIVATE
-    Qt6::QuickTest Qt6::QuickControls2 mainverte_styleplugin mainverte_showcaseplugin mainverte_mvlog project_warnings)
+    mainverte_core Qt6::QuickTest Qt6::QuickControls2 mainverte_styleplugin mainverte_showcaseplugin mainverte_mvlog project_warnings)
 target_compile_definitions(mainverte_style_tests PRIVATE
     QUICK_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/qml")
 add_test(NAME mainverte_style COMMAND mainverte_style_tests)

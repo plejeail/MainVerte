@@ -72,7 +72,7 @@ void SetupWizard::complete_setup(const QString& name) {
             } else {
                 emit receiver->failed(ts::get(ts::TextId::Gardener_CreateFailed));
             }
-        }
+        }, ts::get(ts::TextId::Plants_Default).toStdString()
     );
 }
 

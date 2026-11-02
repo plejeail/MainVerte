@@ -373,7 +373,7 @@ int64_t Database::create_gardener(const std::string& name) {
     return sqlite3_last_insert_rowid(_handle);
 }
 
-mv::GardenerResult Database::complete_setup(const std::string& name, const std::string& language) {
+mv::GardenerResult Database::complete_setup(const std::string& name, const std::string& language, const std::string& initial_collection_name) {
     bool transaction_started = false;
     const auto fail = [this, &transaction_started](const char* stage) -> mv::GardenerResult {
         auto message = std::format("DB: cannot complete setup ({}): {}",
@@ -407,6 +407,19 @@ mv::GardenerResult Database::complete_setup(const std::string& name, const std::
     settings->current_gardener_id = id;
     settings->current_collection_id = 0;
     settings->language = language;
+    if (!initial_collection_name.empty()) {
+        statement_ptr collection(nullptr, sqlite3_finalize);
+        if (!prepare_statement(_handle, collection,
+                "INSERT INTO collection(gardener_id,name,created_at,modified_at) VALUES(?1,?2,unixepoch(),unixepoch())") ||
+            sqlite3_bind_int64(collection.get(), 1, id) != SQLITE_OK ||
+            sqlite3_bind_text(collection.get(), 2, initial_collection_name.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
+            sqlite3_step(collection.get()) != SQLITE_DONE) {
+            return fail("initial collection");
+        }
+
+        settings->current_collection_id = sqlite3_last_insert_rowid(_handle);
+    }
+
     if (!write_settings(*settings)) {
         return fail("write settings");
     }
@@ -507,6 +520,17 @@ std::optional<mv::Settings> Database::read_settings() {
 }
 
 bool Database::write_settings(const mv::Settings& settings) {
+    if (settings.current_gardener_id > 0 && settings.current_collection_id > 0) {
+        statement_ptr owner(nullptr, sqlite3_finalize);
+        if (!prepare_statement(_handle, owner, "SELECT 1 FROM collection WHERE id=?1 AND gardener_id=?2") ||
+            sqlite3_bind_int64(owner.get(), 1, settings.current_collection_id) != SQLITE_OK ||
+            sqlite3_bind_int64(owner.get(), 2, settings.current_gardener_id) != SQLITE_OK ||
+            sqlite3_step(owner.get()) != SQLITE_ROW) {
+            log_wrn("DB: collection selection does not belong to gardener");
+            return false;
+        }
+    }
+
     static constexpr const char* sql =
         "UPDATE settings SET current_gardener_id = ?1, current_collection_id = ?2, language = ?3, dark_theme = ?4, log_level = ?5, debug_enabled = ?6 WHERE id = 1";
     auto fail = [this] {

@@ -18,6 +18,7 @@
 #include "mv_core.h"
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
+#include "mv_plants.h"
 #include "services.h"
 
 
@@ -379,4 +380,169 @@ TEST_CASE("Atomic setup rolls back failures and allows retry with another name")
     CHECK(mv::settings().current_gardener_id == received->value().id);
     CHECK(mv::settings().current_collection_id == 0);
     CHECK(mv::settings().language == "es");
+}
+
+TEST_CASE("plant workflow preserves identities ownership and restart") {
+    const auto directory = std::filesystem::temp_directory_path() / std::format(
+        "mainverte-plants-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto filename = (directory / "test.db").string();
+    mv::id_t plant_id = 0;
+    mv::id_t destination = 0;
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(filename));
+        bool created = false;
+        REQUIRE(mv::complete_setup("Gardener", "fr", [&](mv::GardenerResult r) { created = r.has_value(); }, "My Plants"));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(created);
+        REQUIRE(mv::settings().current_collection_id > 0);
+        CHECK(mv::settings().language == "fr");
+        const auto invoke = [&](mv::PlantAction action) {
+            std::optional<mv::PlantsResult> result;
+            REQUIRE(mv::manage_plants(std::move(action), "My Plants", [&](mv::PlantsResult r) { result = std::move(r); }));
+            REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+            deliver_completions();
+            REQUIRE(result.has_value());
+            return std::move(*result);
+        };
+        using K = mv::PlantAction::Kind;
+        auto state = invoke({});
+        REQUIRE(state);
+        REQUIRE(state->collections.size() == 1);
+        const auto initial = state->selected;
+        const auto last_collection = invoke({.kind=K::DeleteCollection, .id=initial});
+        REQUIRE_FALSE(last_collection);
+        CHECK(last_collection.error().code == mv::MainverteError::Code::LastCollection);
+        state = invoke({});
+        REQUIRE(state);
+        CHECK(state->collections.size() == 1);
+        CHECK(state->selected == initial);
+        CHECK_FALSE(invoke({.kind=K::CreateCollection, .name="  "}));
+        state = invoke({.kind=K::CreateCollection, .name="Cuttings"});
+        REQUIRE(state);
+        REQUIRE(state->collections.size() == 2);
+        destination = state->collections.back().id;
+        CHECK(invoke({.kind=K::RenameCollection, .id=destination, .name="New cuttings"}));
+        CHECK_FALSE(invoke({.kind=K::SelectCollection, .id=9999}));
+        CHECK_FALSE(invoke({.kind=K::CreateSpecimen, .id=initial, .name="\t"}));
+        state = invoke({.kind=K::CreateSpecimen, .id=initial, .name="Nishiro", .botanical_name="Gymnocalycium"});
+        REQUIRE(state);
+        REQUIRE(state->specimens.size() == 1);
+        plant_id = state->specimens.front().id;
+        CHECK(invoke({.kind=K::CreateSpecimen, .id=initial, .name="Nishiro"}));
+        CHECK_FALSE(invoke({.kind=K::DeleteCollection, .id=initial}));
+        CHECK(invoke({.kind=K::UpdateSpecimen, .id=plant_id, .name="Nishiro", .cultivar="Updated"}));
+        CHECK_FALSE(invoke({.kind=K::MoveSpecimen, .id=plant_id, .destination=9999}));
+        CHECK(invoke({.kind=K::MoveSpecimen, .id=plant_id, .destination=destination}));
+        auto appearance = mv::settings();
+        appearance.dark_theme = !appearance.dark_theme;
+        REQUIRE(mv::manage_plants({.kind=K::SelectCollection, .id=destination}, "My Plants", [](mv::PlantsResult r) { CHECK(r); }));
+        REQUIRE(mv::save_settings(appearance));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        CHECK(mv::settings().current_collection_id == destination);
+        state = invoke({});
+        REQUIRE(state);
+        REQUIRE(state->specimens.size() == 1);
+        CHECK(state->specimens.front().cultivar == "Updated");
+        state = invoke({.kind=K::ArchiveSpecimen, .id=plant_id});
+        REQUIRE(state);
+        CHECK(state->specimens.front().archived);
+        CHECK_FALSE(invoke({.kind=K::DeleteCollection, .id=destination}));
+        state = invoke({.kind=K::RestoreSpecimen, .id=plant_id});
+        REQUIRE(state);
+        CHECK_FALSE(state->specimens.front().archived);
+        state = invoke({.kind=K::CreateCollection, .name="Empty"});
+        REQUIRE(state);
+        CHECK(invoke({.kind=K::DeleteCollection, .id=state->collections.back().id}));
+        REQUIRE(execute_on_worker("INSERT INTO gardener VALUES(999,'Other',1); INSERT INTO collection VALUES(999,999,'Private',1,1); INSERT INTO specimen(id,collection_id,display_name,created_at,modified_at) VALUES(999,999,'Private plant',1,1)") == SQLITE_OK);
+        CHECK_FALSE(invoke({.kind=K::SelectCollection, .id=999}));
+        CHECK_FALSE(invoke({.kind=K::RenameCollection, .id=999, .name="Forbidden"}));
+        CHECK_FALSE(invoke({.kind=K::DeleteCollection, .id=999}));
+        CHECK_FALSE(invoke({.kind=K::CreateSpecimen, .id=999, .name="Forbidden"}));
+        CHECK_FALSE(invoke({.kind=K::ListSpecimens, .id=999}));
+        CHECK_FALSE(invoke({.kind=K::MoveSpecimen, .id=plant_id, .destination=999}));
+        CHECK_FALSE(invoke({.kind=K::GetSpecimen, .id=999}));
+        state = invoke({.kind=K::GetSpecimen, .id=plant_id});
+        REQUIRE(state);
+        REQUIRE(state->specimens.size() == 1);
+        CHECK(state->specimens.front().id == plant_id);
+        CHECK(state->specimens.front().created_at > 0);
+        state = invoke({.kind=K::ListSpecimens, .id=initial});
+        REQUIRE(state);
+        CHECK(state->specimens.size() == 1);
+        CHECK(state->selected == destination);
+        REQUIRE(execute_on_worker("CREATE TRIGGER fail_specimen BEFORE UPDATE ON specimen BEGIN SELECT RAISE(ABORT,'forced failure'); END") == SQLITE_OK);
+        CHECK_FALSE(invoke({.kind=K::ArchiveSpecimen, .id=plant_id}));
+    }
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(filename));
+        CHECK(mv::settings().current_collection_id == destination);
+        std::optional<mv::PlantsResult> result;
+        REQUIRE(mv::manage_plants({}, "My Plants", [&](mv::PlantsResult r) { result = std::move(r); }));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(result);
+        REQUIRE(*result);
+        REQUIRE((*result)->specimens.size() == 1);
+        CHECK((*result)->specimens.front().id == plant_id);
+        CHECK_FALSE((*result)->specimens.front().archived);
+    }
+    std::error_code error;
+    std::filesystem::remove_all(directory, error);
+    CHECK_FALSE(error);
+}
+
+TEST_CASE("legacy gardener collection initialization is idempotent and setup rolls back") {
+    const auto directory = std::filesystem::temp_directory_path() / std::format(
+        "mainverte-legacy-plants-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+    const auto path = (directory / "legacy.db").string();
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        REQUIRE(execute_on_worker("INSERT INTO gardener VALUES(42,'Legacy',1); UPDATE settings SET current_gardener_id=42") == SQLITE_OK);
+        // Load the owner-thread cache through the existing settings operation.
+        auto settings = mv::settings();
+        settings.current_gardener_id = 42;
+        REQUIRE(mv::save_settings(settings));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        mv::id_t selected = 0;
+        for (int i = 0; i < 3; ++i) {
+            std::optional<mv::PlantsResult> result;
+            REQUIRE(mv::manage_plants({}, "Mes plantes", [&](mv::PlantsResult r) { result = std::move(r); }));
+            REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+            deliver_completions();
+            REQUIRE(result);
+            REQUIRE(*result);
+            REQUIRE((*result)->collections.size() == 1);
+            CHECK((*result)->collections.front().name == "Mes plantes");
+            if (i == 0) selected = (*result)->selected;
+            CHECK((*result)->selected == selected);
+        }
+
+        REQUIRE(execute_on_worker("UPDATE settings SET current_collection_id=NULL") == SQLITE_OK);
+        std::optional<mv::PlantsResult> repaired;
+        REQUIRE(mv::manage_plants({}, "Another name", [&](mv::PlantsResult r) { repaired = std::move(r); }));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(repaired);
+        REQUIRE(*repaired);
+        CHECK((*repaired)->collections.size() == 1);
+        CHECK((*repaired)->selected == selected);
+        REQUIRE(execute_on_worker("CREATE TRIGGER reject_collection BEFORE INSERT ON collection BEGIN SELECT RAISE(ABORT,'forced'); END") == SQLITE_OK);
+        bool failed = false;
+        REQUIRE(mv::complete_setup("Failed gardener", "de", [&](mv::GardenerResult r) { failed = !r; }, "My Plants"));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        CHECK(failed);
+        CHECK(mv::settings().current_gardener_id == 42);
+        CHECK(mv::settings().language.empty());
+        REQUIRE(execute_on_worker("CREATE TRIGGER verify_rollback BEFORE INSERT ON gardener WHEN (SELECT count(*) FROM gardener)<>1 BEGIN SELECT RAISE(ABORT,'partial setup'); END; INSERT INTO gardener VALUES(88,'Rollback verified',1)") == SQLITE_OK);
+    }
+    std::error_code error;
+    std::filesystem::remove_all(directory, error);
+    CHECK_FALSE(error);
 }

@@ -36,13 +36,15 @@ photo_uri       TEXT,
 created_at      INTEGER NOT NULL,
 modified_at     INTEGER NOT NULL);
 
+CREATE INDEX collection_gardener ON collection(gardener_id, id);
 CREATE TABLE specimen(
-id            INTEGER PRIMARY KEY,
-collection_id INTEGER NOT NULL REFERENCES collection(id) ON DELETE CASCADE,
-species_id    INTEGER REFERENCES species(id)  ON DELETE SET NULL,
-location_id   INTEGER REFERENCES location(id) ON DELETE SET NULL,
-display_name  TEXT NOT NULL,
-photo_uri     TEXT,
-acquired_at   INTEGER,
-created_at    INTEGER NOT NULL,
-modified_at   INTEGER NOT NULL);
+    id INTEGER PRIMARY KEY,
+    collection_id INTEGER NOT NULL REFERENCES collection(id) ON DELETE RESTRICT,
+    display_name TEXT NOT NULL CHECK(length(trim(display_name)) > 0),
+    botanical_name TEXT NOT NULL DEFAULT '',
+    cultivar TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    modified_at INTEGER NOT NULL,
+    archived_at INTEGER
+);
+CREATE INDEX specimen_collection ON specimen(collection_id, archived_at, id);

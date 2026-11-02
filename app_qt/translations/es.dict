@@ -21,3 +21,36 @@ Theme_Light,Claro
 Theme_Dark,Oscuro
 Settings_SoftwareVersion,Versión del software: %1
 Settings_DatabaseVersion,Versión de la base de datos: %1
+Plants_Default,Mis plantas
+Plants_NewCollection,Nueva colección
+Plants_Rename,Renombrar
+Plants_Delete,Eliminar colección vacía
+Plants_Active,Plantas activas: %1
+Plants_Archived,Plantas archivadas
+Plants_Retry,Reintentar
+Plants_Loading,Cargando…
+Plants_NoArchived,No hay plantas archivadas.
+Plants_Empty,¡Añade tu primera planta!
+Plants_Add,Añadir planta
+Plants_Name,Nombre (obligatorio)
+Plants_Save,Guardar
+Plants_DeleteConfirm,¿Eliminar esta colección? No debe contener plantas activas ni archivadas.
+Plants_Details,Detalles de la planta
+Plants_Botanical,Nombre botánico (opcional)
+Plants_Cultivar,Cultivar (opcional)
+Plants_Move,Mover a colección
+Plants_Restore,Restaurar
+Plants_Archive,Archivar
+Plants_Back,Volver
+Plants_Failed,No se pudo completar la operación. Comprueba el nombre y la colección. Solo se eliminan colecciones vacías. Reintenta.
+Plants_NotEmpty,Esta colección contiene plantas. Muévelas antes de eliminarla.
+Plants_NameRequired,Introduce un nombre de planta o colección.
+Plants_NoCollection,Crea una colección para gestionar tus plantas.
+Plants_AddFirst,Añadir tu primera planta
+Plants_Manage,Gestionar colecciones
+Plants_LastCollection,Debe quedar al menos una colección. Crea otra antes de eliminar esta.
+Plants_FilterArchived,Archivadas
+Plants_ManagePlant,Organizar planta
+Plants_SaveBeforeMove,Guarda o descarta los cambios antes de mover o archivar esta planta.
+Plants_Discard,Descartar cambios
+Plants_CurrentCollection,Colección actual:

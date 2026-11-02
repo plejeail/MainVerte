@@ -21,7 +21,11 @@ using id_t = int64_t;
 struct MainverteError {
     enum class Code : uint8_t {
         NotRunning,  ///< The database worker refused the submission.
-        Database     ///< A database operation failed after submission.
+        Database,    ///< A database operation failed after submission.
+        InvalidInput,
+        NotFound,
+        CollectionNotEmpty,
+        LastCollection
     };
 
     Code code;

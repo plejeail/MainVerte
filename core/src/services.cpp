@@ -40,6 +40,12 @@ Database& service::database() {
     return services_instance->database;
 }
 
+void service::update_collection_selection(mv::id_t gardener, mv::id_t collection) {
+    if (services_instance && services_instance->settings.current_gardener_id == gardener) {
+        services_instance->settings.current_collection_id = collection;
+    }
+}
+
 bool mv::Services::initialize(std::string_view database_path) {
     assert(!initialized);
     if (initialized) {
@@ -86,9 +92,20 @@ mv::Settings mv::settings() {
 bool mv::save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callback) {
     assert(services_instance != nullptr);
     auto completion = std::make_shared<MoveOnlyFunction<void(bool)>>(std::move(callback));
+    const auto cached = service::settings();
+    const bool preserve_selection = settings.current_gardener_id == cached.current_gardener_id &&
+                                    settings.current_collection_id == cached.current_collection_id;
     const bool accepted = service::database().submit(
-    [settings, completion](sqlite3*) {
-        const bool saved = service::database().write_settings(settings);
+    [settings = Settings(settings), preserve_selection, completion](sqlite3*) mutable {
+        // Presentation settings submitted while a collection selection is pending
+        // must not overwrite that selection with an older owner-thread snapshot.
+        auto persisted = preserve_selection ? service::database().read_settings() : std::optional<Settings>(settings);
+        if (persisted && preserve_selection) {
+            settings.current_gardener_id = persisted->current_gardener_id;
+            settings.current_collection_id = persisted->current_collection_id;
+        }
+
+        const bool saved = persisted && service::database().write_settings(settings);
         mv::platform::dispatch_callback([settings, saved, completion] {
             if (saved && services_instance) {
                 services_instance->settings = settings;
@@ -107,7 +124,7 @@ bool mv::save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> ca
     return accepted;
 }
 
-bool mv::complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback) {
+bool mv::complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback, std::string initial_collection_name) {
     assert(services_instance != nullptr);
     assert(callback);
     if (name.empty()) {
@@ -117,12 +134,13 @@ bool mv::complete_setup(std::string name, std::string language, MoveOnlyFunction
 
     auto completion = std::make_shared<MoveOnlyFunction<void(GardenerResult)>>(std::move(callback));
     const bool accepted = service::database().submit(
-    [name = std::move(name), language = std::move(language), completion](sqlite3*) {
-        auto result = service::database().complete_setup(name, language);
-        mv::platform::dispatch_callback([result = std::move(result), language, completion]() mutable {
+    [name = std::move(name), language = std::move(language), initial_collection_name = std::move(initial_collection_name), completion](sqlite3*) {
+        auto result = service::database().complete_setup(name, language, initial_collection_name);
+        const auto selected = result ? service::database().read_settings() : std::nullopt;
+        mv::platform::dispatch_callback([result = std::move(result), language, selected, completion]() mutable {
             if (result && services_instance) {
                 services_instance->settings.current_gardener_id = result->id;
-                services_instance->settings.current_collection_id = 0;
+                services_instance->settings.current_collection_id = selected ? selected->current_collection_id : 0;
                 services_instance->settings.language = language;
             }
 
