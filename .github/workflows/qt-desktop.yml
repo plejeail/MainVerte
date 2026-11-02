@@ -1,0 +1,55 @@
+name: Qt Desktop CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows-msvc:
+    name: Windows / MSVC 2022 / Qt 6.12
+    runs-on: windows-2022
+    timeout-minutes: 45
+
+    env:
+      QT_QPA_PLATFORM: offscreen
+      QT_QPA_FONTDIR: 'C:\Windows\Fonts'
+      QT_QUICK_BACKEND: software
+
+    steps:
+      - name: Checkout (including doctest)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Qt 6.12
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.12.0'
+          target: desktop
+          arch: win64_msvc2022_64
+          # aqtinstall 3.3.0 cannot resolve the Qt 6.11+ Windows repository layout.
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7'
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build/ci-windows-msvc2022 -G "Visual Studio 17 2022" -A x64 -DBUILD_QT_APP=ON -DBUILD_TESTING=ON "-DCMAKE_PREFIX_PATH=$env:QT_ROOT_DIR"
+
+      - name: Build application and tests
+        shell: pwsh
+        run: cmake --build build/ci-windows-msvc2022 --config Debug --parallel 2
+
+      - name: Run CTest
+        shell: pwsh
+        run: |
+          # Avoid duplicate PATH/Path entries hiding the Qt DLL directories.
+          $runtimePath = $env:PATH
+          Remove-Item Env:PATH -ErrorAction SilentlyContinue
+          Remove-Item Env:Path -ErrorAction SilentlyContinue
+          $env:Path = $runtimePath
+          ctest --test-dir build/ci-windows-msvc2022 -C Debug --output-on-failure --no-tests=error
