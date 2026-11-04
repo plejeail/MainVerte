@@ -7,6 +7,24 @@
 
 #include "translator.h"
 
+namespace {
+
+using CoreAction = mv::PlantAction::Kind;
+
+// QML actions are converted directly to Core actions in submit().
+static_assert(PlantModel::Browse == std::to_underlying(CoreAction::Browse));
+static_assert(PlantModel::CreateCollection == std::to_underlying(CoreAction::CreateCollection));
+static_assert(PlantModel::RenameCollection == std::to_underlying(CoreAction::RenameCollection));
+static_assert(PlantModel::SelectCollection == std::to_underlying(CoreAction::SelectCollection));
+static_assert(PlantModel::DeleteCollection == std::to_underlying(CoreAction::DeleteCollection));
+static_assert(PlantModel::CreateSpecimen == std::to_underlying(CoreAction::CreateSpecimen));
+static_assert(PlantModel::UpdateSpecimen == std::to_underlying(CoreAction::UpdateSpecimen));
+static_assert(PlantModel::MoveSpecimen == std::to_underlying(CoreAction::MoveSpecimen));
+static_assert(PlantModel::ArchiveSpecimen == std::to_underlying(CoreAction::ArchiveSpecimen));
+static_assert(PlantModel::RestoreSpecimen == std::to_underlying(CoreAction::RestoreSpecimen));
+
+}  //  namespace
+
 QHash<int, QByteArray> PlantModel::roleNames() const {
     return {{Qt::UserRole, "plantId"}, {Qt::UserRole + 1, "plantName"},
             {Qt::UserRole + 2, "botanical"}, {Qt::UserRole + 3, "cultivar"}};
@@ -49,10 +67,11 @@ void PlantModel::showArchived(bool value) {
     _archived = value;
     rebuild();
 }
-void PlantModel::refresh() { submit(0); }
+void PlantModel::refresh() { submit(Browse); }
 void PlantModel::submit(int kind, const QString& id, const QString& name,
                         const QString& botanical, const QString& cultivar, const QString& destination) {
-    if (_busy || kind < 0 || kind > 9) return;
+    if (_busy || kind < Browse || kind > RestoreSpecimen) return;
+
     _busy = true;
     _error.clear();
     emit changed();
@@ -65,9 +84,10 @@ void PlantModel::submit(int kind, const QString& id, const QString& name,
         receiver->_busy = false;
         if (result) {
             receiver->_plants = std::move(*result);
-            if (kind == 5) receiver->_archived = false;
+            if (kind == CreateSpecimen) receiver->_archived = false;
+
             receiver->rebuild();
-            if (kind != 0) emit receiver->saved();
+            if (kind != Browse) emit receiver->saved();
         } else {
             const auto code = result.error().code;
             receiver->_error = ts::get(code == mv::MainverteError::Code::LastCollection
