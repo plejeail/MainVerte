@@ -1,26 +1,32 @@
 ---
 name: mainverte-qml-component
-description: Create or change MainVerte QML widgets, pages and interactive behavior using its design system. Use for UI implementation, not catalog-only, SQL-only or build-only changes.
+description: Implement or modify MainVerte QML pages, controls and interactive UI behavior. Use for QML interface changes, not translation-only, SQL-only or build-diagnostics tasks.
 ---
 
 # MainVerte QML components
 
-Deliver the requested interaction using existing controls and the smallest useful composition. Repository paths below are relative to the repository root.
+Implement the requested interaction within the existing Qt/QML architecture.
+Follow `app_qt/AGENTS.md` and inspect only the relevant code and references.
 
-## Choose the integration point
+## Design and composition
 
-- For a page, inspect the closest page under `app_qt/qml/` and its navigation/caller. Keep page-specific composition local unless reuse is demonstrated.
-- For shared control appearance/behavior, consult the relevant sections of `docs/design-system.md` and the matching control/helper under `app_qt/style/`. Preserve the Basic control base and its keyboard, focus, accessibility and input behavior instead of recreating it.
-- Add a showcase example under `app_qt/showcase/` when it demonstrates a reusable component or significant shared state. Do not require a demo for every page edit. Keep showcase interactions independent of the journal database.
+- Inspect the closest existing page or control and its callers before adding components. Keep page-specific behavior local; extract shared components when reuse is demonstrated.
+- For visual changes, consult `docs/design-system.md` and the relevant controls under `app_qt/style/`.
+- Use semantic tokens from `Tokens.qml`. Preserve theme bindings, implicit sizing, compact layouts and system text scaling.
+- Prefer existing Qt Quick Controls and preserve keyboard, focus, accessibility and input behavior.
+- Treat `docs/old.*` as historical material, not current UX requirements.
 
-Use semantic tokens from `Tokens.qml`. Retain bindings for theme and scale changes, implicit sizing and compact layouts. Give asynchronous actions pending/error states based on Core completion; use the existing Qt bridge where sufficient. Add a bridge or Core operation only when the requested behavior needs one.
+## Integration
 
-For localized text, follow the existing `Ts.get(TextId...)` usage; use the translation skill when available if catalogs or activation need changes. Do not load translation-generation internals for a layout-only task. Treat `docs/old.*` as historical ideas, not approved UX or domain requirements.
+- Use existing Qt bridges and Core APIs. Introduce new integration mechanisms only when required by the behavior.
+- Reflect asynchronous operation states accurately: pending, success and failure must follow actual Core completion.
+- Use `Ts.get(TextId...)` for localized text. Invoke `mainverte-translations` when modifying catalogs or translation behavior.
+- Check CMake QML registration for new components. App QML files are globbed; style, showcase and test modules require explicit registration where applicable.
+- Add a showcase example for reusable controls or significant shared interactions, not routine page changes. Keep showcases independent of the journal database.
 
-## Wire and verify
+## Verification
 
-Check the module's CMake registration for new files. App QML is globbed; style/showcase lists and test module QML lists need explicit updates where the new component is consumed. Verify the generated module/resource paths rather than adding ad hoc filesystem imports.
-
-Use `app_qt/tests/qml/tst_style.qml` and `app_qt/tests/style_test_main.cpp` for relevant UI regression coverage. The setup/language tests in `app_qt/tests/test_setup_language.cpp` cover their own integration path.
-
-Build the affected app/test targets and run relevant CTest cases. Use the affected module's `_qmllint` target for QML changes. Exercise the changed interaction and applicable compact/enlarged-text/light/dark states; avoid exhaustive unrelated checks. Offscreen success does not establish Android touch, native rendering or deployment correctness. Report actual runtime checks and remaining gaps.
+- Add focused regression coverage where behavior changes. Reuse `app_qt/tests/qml/tst_style.qml`, `style_test_main.cpp` or the closest relevant tests.
+- Build affected targets and run relevant CTest cases and QML lint targets.
+- Exercise affected interactions, including relevant compact layout, enlarged text and light/dark states.
+- Distinguish offscreen test results from actual desktop or Android verification. Report unverified behavior without claiming platform coverage.

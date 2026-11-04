@@ -3,6 +3,22 @@
 Gardening journal for Windows and Android. C++23, Qt Quick/QML, native SQLite, CMake and doctest.
 Read `core/AGENTS.md` or `app_qt/AGENTS.md` when working in that subtree; both apply to changes spanning the boundary.
 
+## Architecture — L.O.C.A.L.
+
+Apply the L.O.C.A.L. principles when designing or modifying code:
+
+- Local reasoning: minimize the context required to understand and change a behavior.
+- Observed needs: design for demonstrated requirements, not hypothetical future extensions.
+- Complexity is a budget: every additional mechanism must justify its cognitive and maintenance cost.
+- Abstractions must earn their place: introduce abstractions when they reduce complexity or protect meaningful boundaries.
+- Least-powerful relationship: use the weakest coupling and least restrictive relationship sufficient for the task.
+
+Favor explicit invariants, concrete domain concepts and changes that remain local.
+
+Hide decisions likely to change, rather than splitting responsibilities into layers without a demonstrated benefit.
+
+These are decision criteria, not absolute prohibitions. Correctness, safety and necessary platform constraints take precedence.
+
 ## Core/app contract
 
 - Core owns business rules and persistence; app owns presentation, platform integration, database paths and Qt conversions. Dependencies point from app to Core. QML may own transient interaction state, not business invariants.
@@ -11,8 +27,6 @@ Read `core/AGENTS.md` or `app_qt/AGENTS.md` when working in that subtree; both a
 - For async APIs, specify input/result ownership, caller and callback threads, and rejection behavior. Queue acceptance is not operation success. App dispatches callbacks onto its event thread and exposes relevant failures to the user. Discarding a callback does not cancel an accepted write.
 
 ## C++ style
-
-- Prefer direct functions, concrete types and explicit state. Add abstractions, interfaces or layers only for a demonstrated need; avoid speculative frameworks and unrelated refactoring.
 - Make ownership explicit, use RAII, and use `shared_ptr` only for actual shared ownership. Preserve local conventions.
 - Do not introduce `throw`, `try`/`catch`, `dynamic_cast` or `typeid` in project code. Do not change compiler flags or vendored code to enforce this policy.
 - Insert a blank line after a completed control-flow block (if/else, for, while, switch) when another statement follows in the same scope. Keep attached else and do/while clauses together.
