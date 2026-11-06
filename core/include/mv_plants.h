@@ -9,6 +9,10 @@
 #include "mv_move_only_function.h"
 
 namespace mv {
+// Descriptive metadata only; profiles do not create or configure care needs.
+// Persisted values are stable across catalogue additions.
+enum class PlantProfile { Succulent = 0, Tropical = 1, FruitTree = 2, Herb = 3, Other = 4 };
+
 struct Collection {
     id_t id = 0;
     std::string name = {};
@@ -25,6 +29,9 @@ struct Specimen {
     int64_t created_at = 0;
     int64_t modified_at = 0;
     std::optional<int64_t> archived_at = {};
+    std::optional<PlantProfile> profile = {};
+    // Calendar date (YYYY-MM-DD), not an insertion timestamp or biological age.
+    std::optional<std::string> acquired_on = {};
 };
 struct Plants {
     std::vector<Collection> collections;
@@ -45,6 +52,12 @@ struct PlantAction {
     std::string name = {};
     std::string botanical_name = {};
     std::string cultivar = {};
+    std::optional<PlantProfile> profile = {};
+    std::optional<std::string> acquired_on = {};
+    // UpdateSpecimen preserves omitted optional metadata by default. Set this to
+    // replace both fields, including explicitly clearing them with nullopt.
+    // Non-null values always update the corresponding field. Ignored on creation.
+    bool replace_optional_metadata = false;
 };
 // Browse returns collections plus all active/archived specimens of the selected
 // collection. GetSpecimen returns one owned specimen by id (across collections).
@@ -53,4 +66,4 @@ struct PlantAction {
 // No operation permanently deletes specimens.
 bool manage_plants(PlantAction action, std::string initial_collection_name,
                    MoveOnlyFunction<void(PlantsResult)> callback);
-}  // namespace mv
+}  //  namespace mv

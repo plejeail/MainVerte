@@ -54,3 +54,53 @@ Plants_ManagePlant,Pflanze organisieren
 Plants_SaveBeforeMove,Speichere oder verwirf Änderungen vor dem Verschieben oder Archivieren.
 Plants_Discard,Änderungen verwerfen
 Plants_CurrentCollection,Aktuelle Sammlung:
+Specimen_Edit,Angaben bearbeiten
+Specimen_Profile,Pflanzenprofil
+Specimen_ProfileUnknown,Nicht angegeben
+Profile_Succulent,Sukkulente
+Profile_Tropical,Tropenpflanze
+Profile_FruitTree,Obstbaum
+Profile_Herb,Küchenkräuter
+Profile_Other,Andere
+Specimen_Acquired,Anschaffungsdatum
+Specimen_DateHint,JJJJ-MM-TT · leer wenn unbekannt
+Specimen_InvalidDate,Gültiges Datum im Format JJJJ-MM-TT eingeben.
+Specimen_DateUnknown,Anschaffungsdatum unbekannt
+Specimen_SinceToday,Seit heute bei dir
+Specimen_SinceDays,Tage bei dir: %1
+Specimen_SinceMonths,Monate bei dir: %1
+Specimen_SinceYears,Jahre bei dir: %1
+Specimen_Portrait,Ein Platz zum Wachsen
+Specimen_PhotoPlaceholder,Pflanzenporträt · Foto folgt später
+Specimen_DiscardConfirm,Ungespeicherte Änderungen verwerfen?
+Care_Title,Pflege
+Care_Add,Pflegebedarf hinzufügen
+Care_Select,Was möchtest du beobachten?
+Care_Empty,Jede Pflanze hat ihren Rhythmus. Füge den gewünschten Pflegebedarf hinzu.
+Care_AllAdded,Alle verfügbaren Pflegearten wurden hinzugefügt.
+Care_NotConfigured,Zeitplan nicht eingerichtet
+Care_ScheduleInfo,Für diesen Bedarf sind noch kein Zeitplan und keine Erinnerungen eingerichtet.
+Care_Remove,Pflegebedarf entfernen
+Care_RemoveConfirm,Diesen Pflegebedarf und seine Konfiguration entfernen?
+Care_Failed,Pflegebedarf konnte nicht geladen oder gespeichert werden. Bitte erneut versuchen.
+Care_Watering,Gießen
+Care_Repotting,Umtopfen
+Care_Fertilizing,Düngen
+Care_Pruning,Rückschnitt
+Care_Treatment,Behandlung
+Care_Light,Licht
+Care_Humidity,Luftfeuchtigkeit
+Care_Temperature,Temperatur
+Care_Watered,Gegossen
+Care_Repotted,Umgetopft
+Care_Fertilized,Gedüngt
+Care_Pruned,Zurückgeschnitten
+Care_Treated,Behandelt
+Care_WateringInfo,Behalte den Wasserbedarf dieser Pflanze im Blick.
+Care_RepottingInfo,Behalte Topf- und Substratwechsel im Blick.
+Care_FertilizingInfo,Behalte den Nährstoffbedarf dieser Pflanze im Blick.
+Care_PruningInfo,Behalte Rückschnitt und Formschnitt im Blick.
+Care_TreatmentInfo,Behalte Behandlungen dieser Pflanze im Blick.
+Care_LightInfo,Beobachte die Lichtverhältnisse dieser Pflanze.
+Care_HumidityInfo,Beobachte die Luftfeuchtigkeit um diese Pflanze.
+Care_TemperatureInfo,Beobachte die Temperatur um diese Pflanze.

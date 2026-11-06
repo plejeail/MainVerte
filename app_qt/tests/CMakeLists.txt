@@ -61,17 +61,17 @@ set(app_translation_header "${CMAKE_CURRENT_BINARY_DIR}/../generated/generated_t
 set_source_files_properties("${app_translation_header}" PROPERTIES GENERATED TRUE)
 target_sources(mainverte_style_tests PRIVATE
     ../src/translator.cpp ../src/translator.h "${app_translation_header}"
-    ../src/plant_model.cpp ../src/plant_model.h ../src/platform.cpp)
+    ../src/plant_model.cpp ../src/plant_model.h ../src/care_model.cpp ../src/care_model.h ../src/platform.cpp)
 target_include_directories(mainverte_style_tests PRIVATE
     ../src "${CMAKE_CURRENT_BINARY_DIR}/../generated")
 add_dependencies(mainverte_style_tests appMainVerte_generate_translations)
-foreach(qml_file IN ITEMS Main.qml CollectionPage.qml SettingsPage.qml)
+foreach(qml_file IN ITEMS Main.qml CollectionPage.qml SettingsPage.qml SpecimenDetailPage.qml CareNeedPage.qml)
     set_source_files_properties("../qml/${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${qml_file}")
 endforeach()
 qt_add_qml_module(mainverte_style_tests
     URI MainVerte
     OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/qml/MainVerte"
-    QML_FILES ../qml/Main.qml ../qml/CollectionPage.qml ../qml/SettingsPage.qml
+    QML_FILES ../qml/Main.qml ../qml/CollectionPage.qml ../qml/SettingsPage.qml ../qml/SpecimenDetailPage.qml ../qml/CareNeedPage.qml
 )
 target_link_libraries(mainverte_style_tests PRIVATE
     mainverte_core Qt6::QuickTest Qt6::QuickControls2 mainverte_styleplugin mainverte_showcaseplugin mainverte_mvlog project_warnings)
@@ -98,3 +98,25 @@ foreach(log_switch_case IN ITEMS disabled partial)
             ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${log_test_runtime_directory}")
     endif()
 endforeach()
+
+qt_add_resources(mainverte_style_tests "care_icons" PREFIX "/" BASE "${CMAKE_CURRENT_SOURCE_DIR}/.." FILES
+    ../img/care/watering.svg
+    ../img/care/repotting.svg
+    ../img/care/fertilizing.svg
+    ../img/care/pruning.svg
+    ../img/care/treatment.svg
+    ../img/care/light.svg
+    ../img/care/humidity.svg
+    ../img/care/temperature.svg
+)
+
+# Controlled completion provider exercises pending, rejected and failed care writes.
+qt_add_executable(mainverte_care_model_tests
+    test_care_model.cpp ../src/care_model.cpp ../src/care_model.h
+    ../src/translator.cpp ../src/translator.h "${app_translation_header}")
+target_include_directories(mainverte_care_model_tests PRIVATE
+    ../src "${CMAKE_CURRENT_BINARY_DIR}/../generated" "${PROJECT_SOURCE_DIR}/core/include")
+add_dependencies(mainverte_care_model_tests appMainVerte_generate_translations)
+target_link_libraries(mainverte_care_model_tests PRIVATE
+    Qt6::Quick mainverte_mvlog doctest::doctest project_warnings)
+add_test(NAME care_model_completion COMMAND mainverte_care_model_tests)

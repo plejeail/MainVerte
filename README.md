@@ -267,7 +267,7 @@ a concurrently queued collection selection.
 The Qt `PlantModel` is a `QAbstractListModel`; IDs cross QML as strings to preserve
 64-bit precision. It allows one pending request, keeps the confirmed grid until selection succeeds,
 and guards asynchronous delivery with `QPointer`. The page uses a virtualized
-`GridView` and scrollable specimen details dialog. Failed writes retain form input.
+`GridView` and a scrollable specimen detail page. Failed writes retain form input.
 All new text is supplied by the English, French, German, and Spanish dictionaries.
 
 Core regression tests use temporary databases. The Qt Quick suite also creates an
@@ -287,3 +287,37 @@ for its anchored add action. Details retain botanical fields and separate editin
 from management. Save or explicitly discard edits before moving or archiving;
 no-op moves are disabled. Failed collection selection retains the confirmed grid.
 Regression checks cover six viewport sizes, both themes, and 150% font scaling.
+
+### Specimen details and care needs
+
+Opening a card now navigates to a full, scrollable detail page, with a botanical
+portrait placeholder and an explicit edit mode. The optional profile catalogue
+(succulent, tropical, fruit tree, herb, other) is descriptive only. Acquisition is
+an optional ISO calendar date (`YYYY-MM-DD`), validated in Core. The displayed
+duration means time with the gardener; the insertion timestamp is never used as
+biological age. Unknown dates stay unknown. `UpdateSpecimen` preserves omitted
+optional metadata; set `replace_optional_metadata` to explicitly replace or clear
+both fields. The Qt edit form opts into this complete metadata replacement.
+
+Migration `0001_specimen_care.sql` upgrades existing M1 databases without changing
+specimen IDs or metadata. `mv_care.h` exposes a single `CareNeed` value and concrete
+list/add/get/delete operations through `manage_care`, using the existing worker and
+completion contract. Each need has a stable ID independent of its type. Core and
+SQLite permit duplicate types; the Qt selector offers only types not yet present.
+`CareModel` keeps confirmed data until completion and surfaces load/write failures.
+
+Care detail pages show descriptive information and an unconfigured schedule, with
+confirmed removal. The central presentation catalogue holds names, icons,
+descriptions and future action labels; M1 executes no care actions. A need describes
+what is tracked, independently of future rules, monitoring state and horticultural
+events. Deleting a need removes its configuration. Future journal events must retain
+their own identity and must not have a cascading lifetime dependency on a need.
+No rule, event, reminder or profile-preset infrastructure is introduced here.
+
+The Qt tests exercise the real add/list/detail/delete flow, type availability,
+editing, keyboard navigation, both themes, narrow screens and 150% text. A separate
+`care_model_completion` test supplies controlled Core completions for pending,
+rejected and failed writes, stale delivery and destroyed receivers. Core tests cover
+restart, independent duplicate needs, specimen/gardener isolation, moves, archives,
+foreign keys and atomic migration rollback. Native Windows and Android checks still
+require their matching kits and devices.

@@ -4,6 +4,7 @@
 
 #include <QAbstractListModel>
 #include <QVariantList>
+#include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include "mv_plants.h"
@@ -33,9 +34,12 @@ public:
     bool busy() const { return _busy; }
     QString error() const { return _error; }
     Q_INVOKABLE void refresh();
+    Q_INVOKABLE void discardSpecimenEditError(const QString& id);
     Q_INVOKABLE void showArchived(bool value);
     Q_INVOKABLE void submit(int kind, const QString& id = {}, const QString& name = {},
-                            const QString& botanical = {}, const QString& cultivar = {}, const QString& destination = {});
+                            const QString& botanical = {}, const QString& cultivar = {}, const QString& destination = {},
+                            int profile = -1, const QString& acquiredOn = {});
+    Q_INVOKABLE QVariantMap specimen(const QString& id) const;
 signals:
     void changed();
     void saved();
@@ -46,4 +50,6 @@ private:
     bool _busy = false;
     bool _archived = false;
     QString _error;
+    int _errorAction = -1;
+    QString _errorId;
 };

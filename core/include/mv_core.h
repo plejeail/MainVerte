@@ -10,6 +10,7 @@
 #include <string>
 #include <string_view>
 
+#include "mv_care.h"
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
 #include "mv_plants.h"
@@ -44,7 +45,7 @@ void log(LogLevel severity, std::string_view msg);
 /// must protect references to objects that may disappear before delivery.
 void dispatch_callback(MoveOnlyFunction<void()> callback);
 
-}  // namespace mv::platform
+}  //  namespace mv::platform
 
 namespace mv {
 
@@ -113,4 +114,4 @@ bool create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> ca
 bool complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback,
                     std::string initial_collection_name = {});
 
-}  // namespace mv
+}  //  namespace mv

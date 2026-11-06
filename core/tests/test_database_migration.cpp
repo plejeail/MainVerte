@@ -33,7 +33,7 @@ struct TestDatabase {
     }
 };
 
-}  // namespace
+}  //  namespace
 
 TEST_CASE("Migration commits schema and version together") {
     TestDatabase db;
@@ -46,7 +46,7 @@ TEST_CASE("Migration commits schema and version together") {
 
 TEST_CASE("Consolidated initial schema includes settings and specimen defaults") {
     TestDatabase db;
-    REQUIRE(mv::sql::scripts.size() == 1);
+    REQUIRE(mv::sql::scripts.size() >= 1);
     REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
     CHECK(db.scalar("PRAGMA user_version") == 1);
     CHECK(db.scalar("SELECT language='' AND dark_theme=0 AND log_level=0 AND debug_enabled=0 FROM settings") == 1);
@@ -103,4 +103,43 @@ TEST_CASE("Failed initial schema rolls back all new objects and preserves existi
     REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
     CHECK(db.scalar("PRAGMA user_version") == 1);
     CHECK(db.scalar("SELECT count(*) FROM specimen") == 0);
+}
+
+TEST_CASE("Care migration preserves M1 specimens and adds optional metadata") {
+    TestDatabase db;
+    REQUIRE(mv::sql::scripts.size() == 2);
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
+    REQUIRE(sqlite3_exec(db.handle,
+        "PRAGMA foreign_keys=ON;"
+        "INSERT INTO gardener VALUES(7,'Camille',123);"
+        "INSERT INTO collection VALUES(9,7,'Garden',123,124);"
+        "UPDATE settings SET current_gardener_id=7,current_collection_id=9,language='fr';"
+        "INSERT INTO specimen VALUES(42,9,'Nishiro','Gymnocalycium','Mihanovichii',100,200,300);",
+        nullptr, nullptr, nullptr) == SQLITE_OK);
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[1], 2));
+    CHECK(db.scalar("PRAGMA user_version") == 2);
+    CHECK(db.scalar("SELECT id=42 AND collection_id=9 AND display_name='Nishiro' AND botanical_name='Gymnocalycium' "
+                    "AND cultivar='Mihanovichii' AND created_at=100 AND modified_at=200 AND archived_at=300 "
+                    "AND profile IS NULL AND acquired_on IS NULL FROM specimen") == 1);
+    CHECK(db.scalar("SELECT current_collection_id=9 AND language='fr' FROM settings") == 1);
+    CHECK(db.scalar("SELECT count(*) FROM care_need") == 0);
+    REQUIRE(sqlite3_exec(db.handle, "INSERT INTO care_need(specimen_id,type) VALUES(42,0),(42,0),(42,1)", nullptr, nullptr, nullptr) == SQLITE_OK);
+    CHECK(db.scalar("SELECT count(DISTINCT id) FROM care_need WHERE specimen_id=42") == 3);
+    CHECK(sqlite3_exec(db.handle, "INSERT INTO care_need(specimen_id,type) VALUES(999,0)", nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    CHECK(sqlite3_exec(db.handle, "INSERT INTO care_need(specimen_id,type) VALUES(42,8)", nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    CHECK(sqlite3_exec(db.handle, "UPDATE specimen SET profile=99", nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    CHECK(db.scalar("SELECT count(*) FROM pragma_foreign_key_check") == 0);
+}
+
+TEST_CASE("Care migration failure rolls back added columns and preserves the prior version") {
+    TestDatabase db;
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
+    REQUIRE(sqlite3_exec(db.handle, "CREATE TABLE care_need(marker); INSERT INTO care_need VALUES(42)", nullptr, nullptr, nullptr) == SQLITE_OK);
+    CHECK_FALSE(detail::migrate_script(db.handle, mv::sql::scripts[1], 2));
+    CHECK(db.scalar("PRAGMA user_version") == 1);
+    CHECK(db.scalar("SELECT marker FROM care_need") == 42);
+    CHECK(db.scalar("SELECT count(*) FROM pragma_table_info('specimen') WHERE name IN ('profile','acquired_on')") == 0);
+    CHECK(sqlite3_get_autocommit(db.handle) == 1);
+    REQUIRE(sqlite3_exec(db.handle, "DROP TABLE care_need", nullptr, nullptr, nullptr) == SQLITE_OK);
+    CHECK(detail::migrate_script(db.handle, mv::sql::scripts[1], 2));
 }
