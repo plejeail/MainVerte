@@ -59,7 +59,8 @@ public:
     bool submit(Job job);
 
     int64_t create_gardener(const std::string& name);
-    mv::GardenerResult complete_setup(const std::string& name, const std::string& language);
+    mv::GardenerResult complete_setup(const std::string& name, const std::string& language,
+                                      const std::string& initial_collection_name = {});
 
     // Use before start() on the owner thread, or on the worker after start().
     std::optional<mv::Settings> read_settings();

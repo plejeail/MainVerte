@@ -229,3 +229,61 @@ python -B tools/tests/test_generate_translations.py
 
 They are also registered as the `translation_generator` CTest when the Qt app
 and `BUILD_TESTING` are enabled.
+
+## Collections and specimens (M1)
+
+The Collection page manages the selected gardener's collections and individual
+plants. Use the collection selector and its adjacent menu to create or rename
+collections, or confirm deletion of an empty collection. The last collection must be retained.
+Collections containing
+active **or archived** plants cannot be deleted. Collection membership represents
+organization, not a physical location or environmental conditions.
+
+Add a plant with only a display name; botanical identification and cultivar are
+optional text. Open a card to edit, move, or archive it. The archived-plants toggle
+provides access to restoration. There is no permanent specimen deletion. Duplicate
+names and botanical identifications are allowed; database IDs identify plants.
+
+The consolidated `0000_init.sql` schema defines the M1 `specimen` table and
+collection/specimen listing indexes, replacing the earlier placeholder table. Specimens reference collections with restrictive
+deletion, and retain creation, modification, and optional archival timestamps.
+A future species catalog can add a reference without changing specimen IDs.
+
+Core exposes owned `Collection`, `Specimen`, and `PlantsResult` values through
+`mv_plants.h` (also included by `mv_core.h`). `manage_plants` submits a concrete
+`PlantAction` to the existing serialized worker. Its return value reports queue
+acceptance; its required callback receives completion through the application
+dispatcher. IDs are scoped to the gardener selected at submission. `GetSpecimen`
+retrieves an owned specimen across that gardener's collections; `ListSpecimens`
+queries a collection without changing selection. Mutation results contain a fresh
+snapshot of the selected collection, including archived specimens.
+
+`complete_setup` accepts an application-localized initial collection name and
+creates/selects it in the same transaction as the gardener and language choice. Browsing an older profile creates
+a collection only when none exists; a missing selection reuses an existing one.
+Selection and all plant changes persist in SQLite. Settings-only writes preserve
+a concurrently queued collection selection.
+
+The Qt `PlantModel` is a `QAbstractListModel`; IDs cross QML as strings to preserve
+64-bit precision. It allows one pending request, keeps the confirmed grid until selection succeeds,
+and guards asynchronous delivery with `QPointer`. The page uses a virtualized
+`GridView` and scrollable specimen details dialog. Failed writes retain form input.
+All new text is supplied by the English, French, German, and Spanish dictionaries.
+
+Core regression tests use temporary databases. The Qt Quick suite also creates an
+isolated temporary database and exercises real Core completions, empty/populated
+grids, collection switching, validation/error feedback, details navigation,
+archival/restoration, and resizing. Run the regular CTest suites and
+`appMainVerte_qmllint` after building. Offscreen checks do not validate native
+Windows/Android rendering, deployment, touch input, or accessibility services.
+
+M1 deliberately adds no journals, care schedules, measurements, species catalog,
+photos, cloud synchronization, or permanent plant deletion. Those remain future
+milestone work; no M2 infrastructure is introduced here.
+
+The M1 gallery keeps at least two columns at 320 logical pixels, uses compact
+cards with only a placeholder and a two-line name, and reserves a separate row
+for its anchored add action. Details retain botanical fields and separate editing
+from management. Save or explicitly discard edits before moving or archiving;
+no-op moves are disabled. Failed collection selection retains the confirmed grid.
+Regression checks cover six viewport sizes, both themes, and 150% font scaling.

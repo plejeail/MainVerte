@@ -21,3 +21,36 @@ Theme_Light,Hell
 Theme_Dark,Dunkel
 Settings_SoftwareVersion,Softwareversion: %1
 Settings_DatabaseVersion,Datenbankversion: %1
+Plants_Default,Meine Pflanzen
+Plants_NewCollection,Neue Sammlung
+Plants_Rename,Umbenennen
+Plants_Delete,Leere Sammlung löschen
+Plants_Active,Aktive Pflanzen: %1
+Plants_Archived,Archivierte Pflanzen
+Plants_Retry,Erneut versuchen
+Plants_Loading,Wird geladen…
+Plants_NoArchived,Keine archivierten Pflanzen.
+Plants_Empty,Willkommen! Füge deine erste Pflanze hinzu.
+Plants_Add,Pflanze hinzufügen
+Plants_Name,Name (erforderlich)
+Plants_Save,Speichern
+Plants_DeleteConfirm,Sammlung löschen? Sie darf keine aktiven oder archivierten Pflanzen enthalten.
+Plants_Details,Pflanzendetails
+Plants_Botanical,Botanischer Name (optional)
+Plants_Cultivar,Sorte (optional)
+Plants_Move,In Sammlung verschieben
+Plants_Restore,Wiederherstellen
+Plants_Archive,Archivieren
+Plants_Back,Zurück
+Plants_Failed,Vorgang fehlgeschlagen. Name und Sammlung prüfen. Nur leere Sammlungen können gelöscht werden. Bitte erneut versuchen.
+Plants_NotEmpty,Diese Sammlung enthält Pflanzen. Verschiebe sie vor dem Löschen.
+Plants_NameRequired,Gib einen Pflanzen- oder Sammlungsnamen ein.
+Plants_NoCollection,Erstelle eine Sammlung für deine Pflanzen.
+Plants_AddFirst,Erste Pflanze hinzufügen
+Plants_Manage,Sammlungen verwalten
+Plants_LastCollection,Mindestens eine Sammlung muss bleiben. Erstelle zuerst eine weitere Sammlung.
+Plants_FilterArchived,Archiviert
+Plants_ManagePlant,Pflanze organisieren
+Plants_SaveBeforeMove,Speichere oder verwirf Änderungen vor dem Verschieben oder Archivieren.
+Plants_Discard,Änderungen verwerfen
+Plants_CurrentCollection,Aktuelle Sammlung:

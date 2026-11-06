@@ -27,6 +27,7 @@ struct TestDatabase {
         if (prepared == SQLITE_OK && sqlite3_step(statement) == SQLITE_ROW) {
             value = sqlite3_column_int(statement, 0);
         }
+
         CHECK(sqlite3_finalize(statement) == SQLITE_OK);
         return value;
     }
@@ -43,76 +44,63 @@ TEST_CASE("Migration commits schema and version together") {
     CHECK(sqlite3_get_autocommit(db.handle) == 1);
 }
 
-TEST_CASE("Language migration preserves existing gardener and collection settings") {
+TEST_CASE("Consolidated initial schema includes settings and specimen defaults") {
+    TestDatabase db;
+    REQUIRE(mv::sql::scripts.size() == 1);
+    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
+    CHECK(db.scalar("PRAGMA user_version") == 1);
+    CHECK(db.scalar("SELECT language='' AND dark_theme=0 AND log_level=0 AND debug_enabled=0 FROM settings") == 1);
+    CHECK(db.scalar("SELECT count(*) FROM sqlite_master WHERE type='index' AND name IN ('collection_gardener','specimen_collection')") == 2);
+    CHECK(db.scalar("SELECT count(*) FROM pragma_table_info('specimen') WHERE name IN ('species_id','location_id','photo_uri')") == 0);
+    REQUIRE(sqlite3_exec(db.handle,
+        "PRAGMA foreign_keys=ON;"
+        "INSERT INTO gardener VALUES(7,'Camille',123);"
+        "INSERT INTO collection VALUES(9,7,'Garden',123,123);"
+        "UPDATE settings SET current_gardener_id=7,current_collection_id=9,language='fr',dark_theme=1,log_level=2,debug_enabled=1;"
+        "INSERT INTO specimen(collection_id,display_name,created_at,modified_at) VALUES(9,'Nishiro',123,123);"
+        "INSERT INTO specimen(collection_id,display_name,created_at,modified_at) VALUES(9,'Nishiro',123,123);",
+        nullptr, nullptr, nullptr) == SQLITE_OK);
+    CHECK(db.scalar("SELECT count(*) FROM specimen WHERE display_name='Nishiro'") == 2);
+    CHECK(db.scalar("SELECT count(*) FROM specimen WHERE botanical_name='' AND cultivar='' AND archived_at IS NULL") == 2);
+    CHECK(db.scalar("SELECT language='fr' AND dark_theme=1 AND log_level=2 AND debug_enabled=1 AND current_collection_id=9 FROM settings") == 1);
+    CHECK(sqlite3_exec(db.handle, "DELETE FROM collection WHERE id=9", nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    CHECK(sqlite3_exec(db.handle,
+        "INSERT INTO specimen(collection_id,display_name,created_at,modified_at) VALUES(999,'Invalid',1,1)",
+        nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    CHECK(sqlite3_exec(db.handle,
+        "INSERT INTO specimen(collection_id,display_name,created_at,modified_at) VALUES(9,'   ',1,1)",
+        nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+}
+
+TEST_CASE("Consolidated settings constraints reject invalid values without changing data") {
     TestDatabase db;
     REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
     REQUIRE(sqlite3_exec(db.handle,
-        "INSERT INTO gardener VALUES(7, 'Camille', 0);"
-        "INSERT INTO collection VALUES(9, 7, 'Garden', 0, 0);"
-        "UPDATE settings SET current_gardener_id=7, current_collection_id=9;",
+        "UPDATE settings SET language='fr',dark_theme=1,log_level=2,debug_enabled=1",
         nullptr, nullptr, nullptr) == SQLITE_OK);
-    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[1], 2));
-    CHECK(db.scalar("PRAGMA user_version") == 2);
-    CHECK(db.scalar("SELECT current_gardener_id FROM settings") == 7);
-    CHECK(db.scalar("SELECT current_collection_id FROM settings") == 9);
-    CHECK(db.scalar("SELECT count(*) FROM gardener WHERE display_name='Camille'") == 1);
-    CHECK(db.scalar("SELECT language = '' FROM settings") == 1);
+    for (const auto* sql : {"UPDATE settings SET dark_theme=2", "UPDATE settings SET dark_theme=NULL",
+                           "UPDATE settings SET log_level=-1", "UPDATE settings SET log_level=4",
+                           "UPDATE settings SET log_level=NULL", "UPDATE settings SET log_level=1.5",
+                           "UPDATE settings SET debug_enabled=-1", "UPDATE settings SET debug_enabled=2",
+                           "UPDATE settings SET debug_enabled=NULL", "UPDATE settings SET debug_enabled=0.5",
+                           "UPDATE settings SET language=NULL"}) {
+        CHECK(sqlite3_exec(db.handle, sql, nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
+    }
+
+    CHECK(db.scalar("SELECT language='fr' AND dark_theme=1 AND log_level=2 AND debug_enabled=1 FROM settings") == 1);
 }
 
-TEST_CASE("Theme migration preserves existing settings and defaults to light") {
+TEST_CASE("Failed initial schema rolls back all new objects and preserves existing data") {
     TestDatabase db;
+    REQUIRE(sqlite3_exec(db.handle, "CREATE TABLE specimen(marker INTEGER); INSERT INTO specimen VALUES(42)",
+                         nullptr, nullptr, nullptr) == SQLITE_OK);
+    CHECK_FALSE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
+    CHECK(db.scalar("PRAGMA user_version") == 0);
+    CHECK(db.scalar("SELECT marker FROM specimen") == 42);
+    CHECK(db.scalar("SELECT count(*) FROM sqlite_master WHERE name IN ('gardener','collection','settings','species','collection_gardener')") == 0);
+    CHECK(sqlite3_get_autocommit(db.handle) == 1);
+    REQUIRE(sqlite3_exec(db.handle, "DROP TABLE specimen", nullptr, nullptr, nullptr) == SQLITE_OK);
     REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[0], 1));
-    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[1], 2));
-    REQUIRE(sqlite3_exec(db.handle,
-        "INSERT INTO gardener VALUES(7, 'Camille', 0);"
-        "INSERT INTO collection VALUES(9, 7, 'Garden', 0, 0);"
-        "UPDATE settings SET current_gardener_id=7, current_collection_id=9, language='fr';",
-        nullptr, nullptr, nullptr) == SQLITE_OK);
-    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[2], 3));
-    CHECK(db.scalar("PRAGMA user_version") == 3);
-    CHECK(db.scalar("SELECT current_gardener_id FROM settings") == 7);
-    CHECK(db.scalar("SELECT current_collection_id FROM settings") == 9);
-    CHECK(db.scalar("SELECT language='fr' FROM settings") == 1);
-    CHECK(db.scalar("SELECT dark_theme FROM settings") == 0);
-    CHECK(sqlite3_exec(db.handle, "UPDATE settings SET dark_theme=2", nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
-}
-
-TEST_CASE("Log level migration preserves settings and defaults to debug") {
-    TestDatabase db;
-    for (size_t index = 0; index < 3; ++index) {
-        REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[index], index + 1));
-    }
-
-    REQUIRE(sqlite3_exec(db.handle,
-        "INSERT INTO gardener VALUES(7, 'Camille', 0);"
-        "INSERT INTO collection VALUES(9, 7, 'Garden', 0, 0);"
-        "UPDATE settings SET current_gardener_id=7, current_collection_id=9, language='fr', dark_theme=1;",
-        nullptr, nullptr, nullptr) == SQLITE_OK);
-    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[3], 4));
-    CHECK(db.scalar("PRAGMA user_version") == 4);
-    CHECK(db.scalar("SELECT current_gardener_id=7 AND current_collection_id=9 "
-                    "AND language='fr' AND dark_theme=1 AND log_level=0 FROM settings") == 1);
-    CHECK(db.scalar("SELECT count(*) FROM gardener WHERE display_name='Camille'") == 1);
-    for (const auto* sql : {"UPDATE settings SET log_level=-1", "UPDATE settings SET log_level=4",
-                            "UPDATE settings SET log_level=NULL", "UPDATE settings SET log_level=1.5"}) {
-        CHECK(sqlite3_exec(db.handle, sql, nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
-    }
-}
-
-TEST_CASE("Debug migration preserves existing settings and defaults to disabled") {
-    TestDatabase db;
-    for (size_t index = 0; index < 4; ++index) {
-        REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[index], index + 1));
-    }
-
-    REQUIRE(sqlite3_exec(db.handle,
-        "UPDATE settings SET language='fr', dark_theme=1, log_level=2;",
-        nullptr, nullptr, nullptr) == SQLITE_OK);
-    REQUIRE(detail::migrate_script(db.handle, mv::sql::scripts[4], 5));
-    CHECK(db.scalar("PRAGMA user_version") == 5);
-    CHECK(db.scalar("SELECT language='fr' AND dark_theme=1 AND log_level=2 AND debug_enabled=0 FROM settings") == 1);
-    for (const auto* sql : {"UPDATE settings SET debug_enabled=-1", "UPDATE settings SET debug_enabled=2",
-                            "UPDATE settings SET debug_enabled=NULL", "UPDATE settings SET debug_enabled=0.5"}) {
-        CHECK(sqlite3_exec(db.handle, sql, nullptr, nullptr, nullptr) == SQLITE_CONSTRAINT);
-    }
+    CHECK(db.scalar("PRAGMA user_version") == 1);
+    CHECK(db.scalar("SELECT count(*) FROM specimen") == 0);
 }

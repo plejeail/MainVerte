@@ -293,6 +293,24 @@ TEST_CASE("setup page uses its injected wizard for language selection and errors
     CHECK(mv::settings().language.empty());
     wizard.complete_setup("");
     CHECK(page->property("errorMessage").toString() == ts::get(ts::TextId::Gardener_NameRequired));
+    auto* name = page->findChild<QObject*>("gardenerName");
+    REQUIRE(name);
+    REQUIRE(name->setProperty("text", "Camille"));
+    QEventLoop saving;
+    bool created = false;
+    QObject::connect(&wizard, &SetupWizard::created, &saving, [&](const QString&) {
+        created = true;
+        saving.quit();
+    });
+    QTimer::singleShot(5000, &saving, &QEventLoop::quit);
+    REQUIRE(QMetaObject::invokeMethod(page.get(), "submit"));
+    CHECK(wizard.busy());
+    saving.exec();
+    REQUIRE(created);
+    CHECK(page->property("errorMessage").toString().isEmpty());
+    CHECK(mv::settings().language == "fr");
+    CHECK(mv::settings().current_gardener_id > 0);
+    CHECK(mv::settings().current_collection_id > 0);
 }
 
 TEST_CASE("theme applies immediately and persists across restarts without changing language") {

@@ -12,6 +12,7 @@
 
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
+#include "mv_plants.h"
 #include "mv_settings.h"
 
 
@@ -43,7 +44,7 @@ void log(LogLevel severity, std::string_view msg);
 /// must protect references to objects that may disappear before delivery.
 void dispatch_callback(MoveOnlyFunction<void()> callback);
 
-}  // mv::platform
+}  // namespace mv::platform
 
 namespace mv {
 
@@ -99,14 +100,17 @@ bool save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callba
 /// submissions, are delivered through the same dispatcher. The name is owned by Core.
 bool create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> callback);
 
-/// Atomically creates and selects a gardener, clears the collection and saves language.
-/// An empty language stores the system preference. Core owns both input strings.
+/// Atomically creates and selects a gardener and saves language. When supplied,
+/// the localized initial collection name creates and selects its collection in
+/// the same transaction; the empty-name form leaves no collection selected.
+/// An empty language stores the system preference. Core owns all input strings.
 /// Returns job acceptance, not persistence success; the callback receives the result
 /// after commit or rollback. Updates the selection and language cache on the owner
 /// thread before delivering success.
 /// Requires initialized Services, an owner-thread call and a nonempty callback.
 /// Empty names return false without a callback, as for create_gardener(). Other
 /// errors are delivered through platform::dispatch_callback; false means refused.
-bool complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback);
+bool complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback,
+                    std::string initial_collection_name = {});
 
 }  // namespace mv

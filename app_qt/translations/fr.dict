@@ -21,3 +21,36 @@ Theme_Light,Clair
 Theme_Dark,Sombre
 Settings_SoftwareVersion,Version du logiciel: %1
 Settings_DatabaseVersion,Version de la base de données: %1
+Plants_Default,Mes plantes
+Plants_NewCollection,Nouvelle collection
+Plants_Rename,Renommer
+Plants_Delete,Supprimer la collection vide
+Plants_Active,Plantes actives : %1
+Plants_Archived,Plantes archivées
+Plants_Retry,Réessayer
+Plants_Loading,Chargement…
+Plants_NoArchived,Aucune plante archivée.
+Plants_Empty,Bienvenue ! Ajoutez votre première plante.
+Plants_Add,Ajouter une plante
+Plants_Name,Nom (obligatoire)
+Plants_Save,Enregistrer
+Plants_DeleteConfirm,Supprimer cette collection ? Elle ne doit contenir aucune plante active ou archivée.
+Plants_Details,Détails de la plante
+Plants_Botanical,Nom botanique (facultatif)
+Plants_Cultivar,Cultivar (facultatif)
+Plants_Move,Déplacer vers une collection
+Plants_Restore,Restaurer
+Plants_Archive,Archiver
+Plants_Back,Retour
+Plants_Failed,Impossible de terminer cette opération. Vérifiez le nom et la collection. Seules les collections vides peuvent être supprimées. Réessayez.
+Plants_NotEmpty,Cette collection contient des plantes. Déplacez-les avant de la supprimer.
+Plants_NameRequired,Saisissez un nom de plante ou de collection.
+Plants_NoCollection,Créez une collection pour gérer vos plantes.
+Plants_AddFirst,Ajouter votre première plante
+Plants_Manage,Gérer les collections
+Plants_LastCollection,Gardez au moins une collection. Créez-en une autre avant de supprimer celle-ci.
+Plants_FilterArchived,Archivées
+Plants_ManagePlant,Organiser la plante
+Plants_SaveBeforeMove,Enregistrez ou annulez vos modifications avant de déplacer ou archiver cette plante.
+Plants_Discard,Annuler les modifications
+Plants_CurrentCollection,Collection actuelle :

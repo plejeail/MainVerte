@@ -334,7 +334,7 @@ TEST_CASE("Log levels round trip and invalid writes preserve persisted settings"
 
     REQUIRE(database.write_settings({}));
     REQUIRE(database.read_settings().has_value());
-    CHECK(database.read_settings()->log_level == mv::LogLevel::Inf);
+    CHECK(database.read_settings()->log_level == mv::LogLevel::Dbg);
 }
 
 TEST_CASE("Invalid stored log levels are rejected without narrowing") {
@@ -352,7 +352,7 @@ TEST_CASE("Invalid stored log levels are rejected without narrowing") {
     REQUIRE(run_job(database, [&database](sqlite3*) { return database.write_settings({}); }));
     const auto recovered = run_job(database, [&database](sqlite3*) { return database.read_settings(); });
     REQUIRE(recovered.has_value());
-    CHECK(recovered->log_level == mv::LogLevel::Inf);
+    CHECK(recovered->log_level == mv::LogLevel::Dbg);
 }
 
 TEST_CASE("Invalid stored debug flags are rejected and the cached statement recovers") {

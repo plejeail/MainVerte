@@ -8,6 +8,7 @@
 // ------------------------------------------------------------- mainverte/core
 #pragma once
 
+#include "mv_definitions.h"
 #include "mv_settings.h"
 
 
@@ -24,5 +25,6 @@ namespace service {
 
 mv::Settings& settings();
 Database& database();
+void update_collection_selection(mv::id_t gardener, mv::id_t collection);
 
-}  // service
+}  // namespace service

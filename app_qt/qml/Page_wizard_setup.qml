@@ -19,7 +19,7 @@ Page {
         if (window.wizard.busy || nameField.text.trim().length === 0)
             return;
         window.errorMessage = "";
-        window.wizard.createGardener(nameField.text);
+        window.wizard.complete_setup(nameField.text);
     }
 
     implicitHeight: form.implicitHeight + 96
@@ -173,6 +173,7 @@ Page {
 
                     TextField {
                         id: nameField
+                        objectName: "gardenerName"
 
                         Accessible.name: Ts.get(TextId.Gardener_NameLabel)
                         color: "#F2FFE9"

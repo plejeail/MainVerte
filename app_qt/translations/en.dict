@@ -21,3 +21,36 @@ Theme_Light,Light
 Theme_Dark,Dark
 Settings_SoftwareVersion,Software version: %1
 Settings_DatabaseVersion,Database version: %1
+Plants_Default,My Plants
+Plants_NewCollection,New collection
+Plants_Rename,Rename
+Plants_Delete,Delete empty collection
+Plants_Active,Active plants: %1
+Plants_Archived,Archived plants
+Plants_Retry,Retry
+Plants_Loading,Loading…
+Plants_NoArchived,No archived plants.
+Plants_Empty,Welcome! Add your first plant.
+Plants_Add,Add Plant
+Plants_Name,Name (required)
+Plants_Save,Save
+Plants_DeleteConfirm,Delete this collection? It must contain no active or archived plants.
+Plants_Details,Plant details
+Plants_Botanical,Botanical name (optional)
+Plants_Cultivar,Cultivar (optional)
+Plants_Move,Move to collection
+Plants_Restore,Restore
+Plants_Archive,Archive
+Plants_Back,Back
+Plants_Failed,Unable to complete this operation. Check the name and collection. Only empty collections can be deleted. Please retry.
+Plants_NotEmpty,This collection contains plants. Move them before deleting it.
+Plants_NameRequired,Enter a plant or collection name.
+Plants_NoCollection,Create a collection to start managing your plants.
+Plants_AddFirst,Add your first plant
+Plants_Manage,Manage collections
+Plants_LastCollection,Keep at least one collection. Create another collection before deleting this one.
+Plants_FilterArchived,Archived
+Plants_ManagePlant,Organize plant
+Plants_SaveBeforeMove,Save or discard your edits before moving or archiving this plant.
+Plants_Discard,Discard edits
+Plants_CurrentCollection,Current collection:
