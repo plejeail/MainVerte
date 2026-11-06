@@ -1,5 +1,7 @@
 // clazy:skip
 #include <QEventLoop>
+#include <QQmlContext>
+#include <QQmlEngine>
 #include <QQuickStyle>
 #include <QTemporaryDir>
 #include <QTimer>
@@ -21,6 +23,12 @@ public:
 public slots:
     void applicationAvailable() {
         if (!services.initialize((directory.path() + "/style.db").toStdString())) qFatal("Test database initialization failed");
+        resetJournal();
+    }
+    void qmlEngineAvailable(QQmlEngine* engine) {
+        engine->rootContext()->setContextProperty("journalTestSetup", this);
+    }
+    Q_INVOKABLE void resetJournal() {
         QEventLoop loop;
         bool created = false;
         mv::complete_setup("Test gardener", "", [&](mv::GardenerResult result) {

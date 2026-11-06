@@ -16,6 +16,16 @@ ApplicationWindow {
     function showSection(index: int) {
         if (currentSection === index)
             return;
+        const collection = pages.currentItem as CollectionPage;
+        if (collection) collection.requestLeave(function() { window.activateSection(index) });
+        else activateSection(index);
+        // Controls must reflect the confirmed section while a discard decision is pending.
+        sectionTabs.setCurrentIndex(currentSection);
+        collectionNavigation.checked = Qt.binding(function() { return window.currentSection === 0 });
+        settingsNavigation.checked = Qt.binding(function() { return window.currentSection === 1 });
+    }
+
+    function activateSection(index: int) {
         currentSection = index;
         pages.replace(index === 0 ? collectionPage : settingsPage);
     }
@@ -41,6 +51,7 @@ ApplicationWindow {
     }
 
     footer: TabBar {
+        id: sectionTabs
         currentIndex: window.currentSection
         visible: !window.desktopNavigation
 
@@ -51,12 +62,14 @@ ApplicationWindow {
         }
 
         TabButton {
+            objectName: "settingsTab"
             text: Ts.get(TextId.Parameters_Title)
 
             onClicked: window.showSection(1)
         }
     }
     header: ToolBar {
+        visible: !((pages.currentItem as CollectionPage)?.showingDetail ?? false)
         RowLayout {
             anchors.fill: parent
 
@@ -85,17 +98,22 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     autoExclusive: true
                     checkable: true
+                    id: collectionNavigation
                     checked: window.currentSection === 0
+
                     text: Ts.get(TextId.Collection_Title)
 
                     onClicked: window.showSection(0)
                 }
 
                 Button {
+                    objectName: "settingsNavigation"
                     Layout.fillWidth: true
                     autoExclusive: true
                     checkable: true
+                    id: settingsNavigation
                     checked: window.currentSection === 1
+
                     text: Ts.get(TextId.Parameters_Title)
 
                     onClicked: window.showSection(1)
