@@ -54,3 +54,53 @@ Plants_ManagePlant,Organize plant
 Plants_SaveBeforeMove,Save or discard your edits before moving or archiving this plant.
 Plants_Discard,Discard edits
 Plants_CurrentCollection,Current collection:
+Specimen_Edit,Edit information
+Specimen_Profile,Plant profile
+Specimen_ProfileUnknown,Not specified
+Profile_Succulent,Succulent
+Profile_Tropical,Tropical
+Profile_FruitTree,Fruit tree
+Profile_Herb,Herb
+Profile_Other,Other
+Specimen_Acquired,Acquisition date
+Specimen_DateHint,YYYY-MM-DD · leave blank if unknown
+Specimen_InvalidDate,Enter a valid date as YYYY-MM-DD.
+Specimen_DateUnknown,Acquisition date unknown
+Specimen_SinceToday,With you since today
+Specimen_SinceDays,Days with you: %1
+Specimen_SinceMonths,Months with you: %1
+Specimen_SinceYears,Years with you: %1
+Specimen_Portrait,A little space to grow
+Specimen_PhotoPlaceholder,Plant portrait · photo coming later
+Specimen_DiscardConfirm,Discard your unsaved changes?
+Care_Title,Care
+Care_Add,Add care need
+Care_Select,What would you like to track?
+Care_Empty,Every plant has its own rhythm. Add the needs you want to follow.
+Care_AllAdded,All available care types have been added.
+Care_NotConfigured,Schedule not configured
+Care_ScheduleInfo,No schedule or reminders are configured for this need yet.
+Care_Remove,Remove care need
+Care_RemoveConfirm,Remove this care need and its configuration?
+Care_Failed,Unable to load or save care needs. Please retry.
+Care_Watering,Watering
+Care_Repotting,Repotting
+Care_Fertilizing,Fertilizing
+Care_Pruning,Pruning
+Care_Treatment,Treatment
+Care_Light,Light
+Care_Humidity,Humidity
+Care_Temperature,Temperature
+Care_Watered,Watered
+Care_Repotted,Repotted
+Care_Fertilized,Fertilized
+Care_Pruned,Pruned
+Care_Treated,Treated
+Care_WateringInfo,Keep track of the water this plant needs.
+Care_RepottingInfo,Follow changes of pot and growing medium.
+Care_FertilizingInfo,Follow this plant’s nutritional needs.
+Care_PruningInfo,Follow pruning and shaping needs.
+Care_TreatmentInfo,Keep an eye on treatments for this plant.
+Care_LightInfo,Observe this plant’s exposure to light.
+Care_HumidityInfo,Observe the humidity around this plant.
+Care_TemperatureInfo,Observe the temperature around this plant.

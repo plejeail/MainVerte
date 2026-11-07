@@ -54,3 +54,53 @@ Plants_ManagePlant,Organizar planta
 Plants_SaveBeforeMove,Guarda o descarta los cambios antes de mover o archivar esta planta.
 Plants_Discard,Descartar cambios
 Plants_CurrentCollection,Colección actual:
+Specimen_Edit,Editar información
+Specimen_Profile,Perfil de planta
+Specimen_ProfileUnknown,Sin especificar
+Profile_Succulent,Suculenta
+Profile_Tropical,Tropical
+Profile_FruitTree,Árbol frutal
+Profile_Herb,Aromática
+Profile_Other,Otra
+Specimen_Acquired,Fecha de adquisición
+Specimen_DateHint,AAAA-MM-DD · vacío si se desconoce
+Specimen_InvalidDate,Introduce una fecha válida como AAAA-MM-DD.
+Specimen_DateUnknown,Fecha de adquisición desconocida
+Specimen_SinceToday,Contigo desde hoy
+Specimen_SinceDays,Días contigo: %1
+Specimen_SinceMonths,Meses contigo: %1
+Specimen_SinceYears,Años contigo: %1
+Specimen_Portrait,Un rincón para crecer
+Specimen_PhotoPlaceholder,Retrato vegetal · foto más adelante
+Specimen_DiscardConfirm,¿Descartar los cambios sin guardar?
+Care_Title,Cuidados
+Care_Add,Añadir un cuidado
+Care_Select,¿Qué te gustaría seguir?
+Care_Empty,Cada planta tiene su ritmo. Añade los cuidados que quieras seguir.
+Care_AllAdded,Se han añadido todos los tipos de cuidado disponibles.
+Care_NotConfigured,Seguimiento sin configurar
+Care_ScheduleInfo,Este cuidado aún no tiene calendario ni recordatorios configurados.
+Care_Remove,Eliminar cuidado
+Care_RemoveConfirm,¿Eliminar este cuidado y su configuración?
+Care_Failed,No se han podido cargar o guardar los cuidados. Inténtalo de nuevo.
+Care_Watering,Riego
+Care_Repotting,Trasplante
+Care_Fertilizing,Fertilización
+Care_Pruning,Poda
+Care_Treatment,Tratamiento
+Care_Light,Luz
+Care_Humidity,Humedad
+Care_Temperature,Temperatura
+Care_Watered,Regado
+Care_Repotted,Trasplantado
+Care_Fertilized,Fertilizado
+Care_Pruned,Podado
+Care_Treated,Tratado
+Care_WateringInfo,Sigue las necesidades de agua de esta planta.
+Care_RepottingInfo,Sigue los cambios de maceta y sustrato.
+Care_FertilizingInfo,Sigue las necesidades nutritivas de esta planta.
+Care_PruningInfo,Sigue las necesidades de poda y formación.
+Care_TreatmentInfo,Sigue los tratamientos de esta planta.
+Care_LightInfo,Observa la exposición a la luz de esta planta.
+Care_HumidityInfo,Observa la humedad ambiental de esta planta.
+Care_TemperatureInfo,Observa la temperatura alrededor de esta planta.

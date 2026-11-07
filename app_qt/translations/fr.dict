@@ -54,3 +54,53 @@ Plants_ManagePlant,Organiser la plante
 Plants_SaveBeforeMove,Enregistrez ou annulez vos modifications avant de déplacer ou archiver cette plante.
 Plants_Discard,Annuler les modifications
 Plants_CurrentCollection,Collection actuelle :
+Specimen_Edit,Modifier les informations
+Specimen_Profile,Profil de plante
+Specimen_ProfileUnknown,Non renseigné
+Profile_Succulent,Succulente
+Profile_Tropical,Tropicale
+Profile_FruitTree,Arbre fruitier
+Profile_Herb,Aromatique
+Profile_Other,Autre
+Specimen_Acquired,Date d’acquisition
+Specimen_DateHint,AAAA-MM-JJ · vide si inconnue
+Specimen_InvalidDate,Saisissez une date valide au format AAAA-MM-JJ.
+Specimen_DateUnknown,Date d’acquisition inconnue
+Specimen_SinceToday,Avec vous depuis aujourd’hui
+Specimen_SinceDays,À vos côtés depuis %1 jour(s)
+Specimen_SinceMonths,À vos côtés depuis %1 mois
+Specimen_SinceYears,À vos côtés depuis %1 an(s)
+Specimen_Portrait,Un petit coin pour grandir
+Specimen_PhotoPlaceholder,Portrait végétal · photo à venir
+Specimen_DiscardConfirm,Abandonner vos modifications non enregistrées ?
+Care_Title,Entretien
+Care_Add,Ajouter un besoin
+Care_Select,Que souhaitez-vous suivre ?
+Care_Empty,Chaque plante a son rythme. Ajoutez les besoins que vous souhaitez suivre.
+Care_AllAdded,Tous les types de besoins disponibles ont été ajoutés.
+Care_NotConfigured,Suivi non configuré
+Care_ScheduleInfo,Aucun calendrier ni rappel n’est encore configuré pour ce besoin.
+Care_Remove,Supprimer ce besoin
+Care_RemoveConfirm,Supprimer ce besoin et sa configuration ?
+Care_Failed,Impossible de charger ou d’enregistrer les besoins. Réessayez.
+Care_Watering,Arrosage
+Care_Repotting,Rempotage
+Care_Fertilizing,Fertilisation
+Care_Pruning,Taille
+Care_Treatment,Traitement
+Care_Light,Lumière
+Care_Humidity,Humidité
+Care_Temperature,Température
+Care_Watered,Arrosé
+Care_Repotted,Rempoté
+Care_Fertilized,Fertilisé
+Care_Pruned,Taillé
+Care_Treated,Traité
+Care_WateringInfo,Suivez les besoins en eau de cette plante.
+Care_RepottingInfo,Suivez les changements de pot et de substrat.
+Care_FertilizingInfo,Suivez les besoins nutritifs de cette plante.
+Care_PruningInfo,Suivez les besoins de taille et de mise en forme.
+Care_TreatmentInfo,Gardez un œil sur les traitements de cette plante.
+Care_LightInfo,Observez l’exposition de cette plante à la lumière.
+Care_HumidityInfo,Observez l’humidité ambiante autour de cette plante.
+Care_TemperatureInfo,Observez la température autour de cette plante.

@@ -51,7 +51,7 @@ int execute_on_worker(const char* sql) {
     return result.get();
 }
 
-}  // namespace
+}  //  namespace
 
 void mv::platform::dispatch_callback(MoveOnlyFunction<void()> callback) {
     std::lock_guard lock(completion_mutex);
@@ -545,4 +545,157 @@ TEST_CASE("legacy gardener collection initialization is idempotent and setup rol
     std::error_code error;
     std::filesystem::remove_all(directory, error);
     CHECK_FALSE(error);
+}
+
+TEST_CASE("Specimen details and independent care needs persist across moves archives and restart") {
+    const auto directory = std::filesystem::temp_directory_path() / std::format(
+        "mainverte-care-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+    struct Cleanup {
+        std::filesystem::path path;
+        ~Cleanup() { std::error_code error; std::filesystem::remove_all(path, error); }
+    } cleanup{directory};
+    const auto path = (directory / "care.db").string();
+    const auto plant = [&](mv::PlantAction action) {
+        std::optional<mv::PlantsResult> result;
+        REQUIRE(mv::manage_plants(std::move(action), "My Plants", [&](mv::PlantsResult value) { result = std::move(value); }));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(result);
+        return std::move(*result);
+    };
+    const auto care = [&](mv::CareAction action) {
+        std::optional<mv::CareResult> result;
+        const auto thread = std::this_thread::get_id();
+        int calls = 0;
+        REQUIRE(mv::manage_care(action, [&](mv::CareResult value) {
+            CHECK(std::this_thread::get_id() == thread);
+            ++calls;
+            result = std::move(value);
+        }));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        CHECK_FALSE(result);
+        deliver_completions();
+        REQUIRE(result);
+        CHECK(calls == 1);
+        return std::move(*result);
+    };
+    using P = mv::PlantAction::Kind;
+    using C = mv::CareAction::Kind;
+    mv::id_t specimen = 0, other = 0, watering = 0, repotting = 0;
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        REQUIRE(mv::complete_setup("Camille", "fr", [](mv::GardenerResult value) { REQUIRE(value); }, "My Plants"));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        const auto collection = mv::settings().current_collection_id;
+        auto state = plant({.kind=P::CreateSpecimen, .id=collection, .name="Nishiro", .botanical_name="Gymnocalycium", .cultivar="Mihanovichii",
+                            .profile=mv::PlantProfile::Succulent, .acquired_on="2024-02-29"});
+        REQUIRE(state);
+        specimen = state->specimens.front().id;
+        auto needs = care({.specimen_id=specimen});
+        REQUIRE(needs);
+        CHECK(needs->empty());
+        needs = care({.kind=C::Add, .specimen_id=specimen, .type=mv::NeedType::Watering});
+        REQUIRE(needs);
+        REQUIRE(needs->size() == 1);
+        watering = needs->front().id;
+        needs = care({.kind=C::Add, .specimen_id=specimen, .type=mv::NeedType::Repotting});
+        REQUIRE(needs);
+        REQUIRE(needs->size() == 2);
+        repotting = needs->back().id;
+        CHECK(watering != repotting);
+        auto retrieved = care({.kind=C::Get, .specimen_id=specimen, .id=watering});
+        REQUIRE(retrieved);
+        REQUIRE(retrieved->size() == 1);
+        CHECK(retrieved->front().type == mv::NeedType::Watering);
+        CHECK(retrieved->front().specimen_id == specimen);
+        // Repeated types have independent IDs and no Core uniqueness invariant.
+        needs = care({.kind=C::Add, .specimen_id=specimen, .type=mv::NeedType::Watering});
+        REQUIRE(needs);
+        REQUIRE(needs->size() == 3);
+        const auto duplicate = needs->back().id;
+        CHECK(duplicate != watering);
+        REQUIRE(care({.kind=C::Delete, .specimen_id=specimen, .id=duplicate}));
+        CHECK_FALSE(care({.kind=C::Get, .specimen_id=specimen, .id=duplicate}));
+        CHECK_FALSE(care({.kind=C::Delete, .specimen_id=specimen, .id=duplicate}));
+        state = plant({.kind=P::CreateSpecimen, .id=collection, .name="Other"});
+        REQUIRE(state);
+        other = state->specimens.front().id;
+        CHECK_FALSE(state->specimens.front().profile);
+        CHECK_FALSE(state->specimens.front().acquired_on);
+        REQUIRE(care({.kind=C::Add, .specimen_id=other, .type=mv::NeedType::Light}));
+        CHECK_FALSE(care({.kind=C::Get, .specimen_id=other, .id=watering}));
+        CHECK_FALSE(care({.kind=C::Delete, .specimen_id=other, .id=watering}));
+        CHECK_FALSE(care({.kind=C::Add, .specimen_id=99999}));
+        CHECK_FALSE(care({.kind=C::Add, .specimen_id=specimen, .type=static_cast<mv::NeedType>(99)}));
+        CHECK_FALSE(plant({.kind=P::UpdateSpecimen, .id=specimen, .name="Nishiro", .acquired_on="2025-02-29"}));
+        CHECK_FALSE(plant({.kind=P::UpdateSpecimen, .id=specimen, .name="Nishiro", .acquired_on="2024-13-01"}));
+        CHECK_FALSE(plant({.kind=P::UpdateSpecimen, .id=specimen, .name="Nishiro", .acquired_on="2024-1-01"}));
+        CHECK_FALSE(plant({.kind=P::UpdateSpecimen, .id=specimen, .name="Nishiro", .profile=static_cast<mv::PlantProfile>(42)}));
+        state = plant({.kind=P::CreateCollection, .name="Sunroom"});
+        REQUIRE(state);
+        REQUIRE(plant({.kind=P::MoveSpecimen, .id=specimen, .destination=state->collections.back().id}));
+        REQUIRE(plant({.kind=P::ArchiveSpecimen, .id=specimen}));
+        needs = care({.specimen_id=specimen});
+        REQUIRE(needs);
+        CHECK(needs->size() == 2);
+        // Database errors do not report success or erase the previously committed list.
+        REQUIRE(execute_on_worker("CREATE TRIGGER fail_care BEFORE INSERT ON care_need BEGIN SELECT RAISE(ABORT,'forced care failure'); END") == SQLITE_OK);
+        const auto failed = care({.kind=C::Add, .specimen_id=specimen, .type=mv::NeedType::Pruning});
+        REQUIRE_FALSE(failed);
+        CHECK(failed.error().message.find("forced care failure") != std::string::npos);
+        REQUIRE(execute_on_worker("DROP TRIGGER fail_care") == SQLITE_OK);
+        REQUIRE(execute_on_worker("INSERT INTO gardener VALUES(999,'Other gardener',1); INSERT INTO collection VALUES(999,999,'Private',1,1); INSERT INTO specimen(id,collection_id,display_name,created_at,modified_at) VALUES(999,999,'Private',1,1); INSERT INTO care_need(id,specimen_id,type) VALUES(999,999,0)") == SQLITE_OK);
+        CHECK_FALSE(care({.specimen_id=999}));
+        CHECK_FALSE(care({.kind=C::Add, .specimen_id=999}));
+        CHECK_FALSE(care({.kind=C::Delete, .specimen_id=999, .id=999}));
+        CHECK_FALSE(care({.kind=C::Get, .specimen_id=999, .id=999}));
+    }
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        auto state = plant({.kind=P::GetSpecimen, .id=specimen});
+        REQUIRE(state);
+        REQUIRE(state->specimens.size() == 1);
+        const auto& value = state->specimens.front();
+        CHECK(value.display_name == "Nishiro");
+        CHECK(value.botanical_name == "Gymnocalycium");
+        CHECK(value.cultivar == "Mihanovichii");
+        CHECK(value.profile == mv::PlantProfile::Succulent);
+        CHECK(value.acquired_on == "2024-02-29");
+        CHECK(value.archived);
+        auto needs = care({.specimen_id=specimen});
+        REQUIRE(needs);
+        REQUIRE(needs->size() == 2);
+        CHECK(needs->front().id == watering);
+        CHECK(needs->back().id == repotting);
+        needs = care({.kind=C::Delete, .specimen_id=specimen, .id=watering});
+        REQUIRE(needs);
+        REQUIRE(needs->size() == 1);
+        CHECK(needs->front().id == repotting);
+        CHECK(needs->front().type == mv::NeedType::Repotting);
+        REQUIRE(care({.kind=C::Add, .specimen_id=specimen, .type=mv::NeedType::Watering}));
+        needs = care({.specimen_id=other});
+        REQUIRE(needs);
+        REQUIRE(needs->size() == 1);
+        CHECK(needs->front().type == mv::NeedType::Light);
+        REQUIRE(plant({.kind=P::RestoreSpecimen, .id=specimen}));
+        REQUIRE(plant({.kind=P::UpdateSpecimen, .id=specimen, .name="Renamed Nishiro"}));
+        state = plant({.kind=P::GetSpecimen, .id=specimen});
+        REQUIRE(state);
+        CHECK(state->specimens.front().display_name == "Renamed Nishiro");
+        CHECK(state->specimens.front().profile == mv::PlantProfile::Succulent);
+        CHECK(state->specimens.front().acquired_on == "2024-02-29");
+        REQUIRE(plant({.kind=P::UpdateSpecimen, .id=specimen, .name="Renamed Nishiro", .replace_optional_metadata=true}));
+    }
+    {
+        mv::Services services;
+        REQUIRE(services.initialize(path));
+        auto state = plant({.kind=P::GetSpecimen, .id=specimen});
+        REQUIRE(state);
+        CHECK(state->specimens.front().display_name == "Renamed Nishiro");
+        CHECK_FALSE(state->specimens.front().profile);
+        CHECK_FALSE(state->specimens.front().acquired_on);
+    }
 }

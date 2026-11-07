@@ -73,6 +73,14 @@ endif()
 qt_add_resources(appMainVerte "img"
     PREFIX "/"
     FILES
+        img/care/watering.svg
+        img/care/repotting.svg
+        img/care/fertilizing.svg
+        img/care/pruning.svg
+        img/care/treatment.svg
+        img/care/light.svg
+        img/care/humidity.svg
+        img/care/temperature.svg
         img/logo_mainverte.svg
         img/logo_mainverte.png
         img/flag_en.svg

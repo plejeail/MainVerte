@@ -12,9 +12,11 @@ TestCase {
     visible: true
     when: windowShown
     Component { id: pageComponent; App.CollectionPage { width: test.width; height: test.height } }
+    function init() { journalTestSetup.resetJournal() }
     function cleanup() { MV.Tokens.dark = false; MV.Tokens.fontScale = 1 }
     function settle(model) { tryCompare(model, "busy", false); compare(model.error, "") }
     function test_workflow() {
+        failOnWarning(/.*/)
         const page = createTemporaryObject(pageComponent, test)
         verify(page)
         const model = findChild(page, "plantModel")
@@ -56,22 +58,29 @@ TestCase {
         const card = grid.itemAtIndex(0)
         verify(card)
         mouseClick(card, card.width / 2, card.height / 2)
-        const details = findChild(page, "specimenDetails")
+        let details = findChild(page, "specimenDetails")
         tryCompare(details, "visible", true)
+        settle(findChild(details, "careModel"))
         compare(findChild(page, "specimenName").text, "Nishiro")
-        page.openedId = "999999"
+        findChild(details, "editSpecimen").clicked()
+        findChild(details, "acquiredOn").text = "2025-02-30"
         findChild(page, "specimenName").text = "Unsaved name"
-        mouseClick(findChild(page, "specimenSave"))
+        findChild(details, "specimenSave").clicked()
         tryCompare(model, "busy", false)
         verify(model.error.length > 0)
         compare(details.visible, true)
         compare(findChild(page, "specimenName").text, "Unsaved name")
+        findChild(details, "discardEdits").clicked()
         details.close()
+        tryVerify(() => findChild(page, "specimenDetails") === null)
         grid.forceActiveFocus()
         keyClick(Qt.Key_Return)
+        details = findChild(page, "specimenDetails")
         tryCompare(details, "visible", true)
+        settle(findChild(details, "careModel"))
         compare(findChild(page, "specimenName").text, "Nishiro")
         details.close()
+        tryVerify(() => findChild(page, "specimenDetails") === null)
         model.submit(1, "", "Cuttings")
         settle(model)
         compare(model.collections.length, 2)
@@ -106,30 +115,31 @@ TestCase {
         verify(grabImage(page).width > 0)
         // Management actions never discard dirty fields, and no-op moves are disabled.
         grid.itemAtIndex(0).openDetails()
+        details = findChild(page, "specimenDetails")
         tryCompare(details, "visible", true)
+        settle(findChild(details, "careModel"))
         const target = findChild(page, "moveDestination")
         const move = findChild(page, "moveSpecimen")
         compare(target.currentValue, original)
         compare(move.enabled, false)
+        findChild(details, "editSpecimen").clicked()
         findChild(page, "specimenName").text = "Unsaved edit"
-        compare(page.dirty, true)
+        compare(details.dirty, true)
         compare(move.enabled, false)
         compare(target.enabled, false)
         findChild(page, "discardEdits").clicked()
         compare(findChild(page, "specimenName").text, "Nishiro")
-        compare(page.dirty, false)
+        compare(details.dirty, false)
         target.currentIndex = target.indexOfValue(second)
         verify(move.enabled)
-        page.openedId = "999999"
-        move.clicked()
+        model.submit(7, "999999", "", "", "", second)
         tryCompare(model, "busy", false)
         verify(model.error.length > 0)
         compare(details.visible, true)
         compare(findChild(page, "specimenName").text, "Nishiro")
-        page.openedId = id
         move.clicked()
         settle(model)
-        tryCompare(details, "visible", false)
+        tryVerify(() => findChild(page, "specimenDetails") === null)
         compare(grid.count, 0)
         model.submit(3, second)
         settle(model)

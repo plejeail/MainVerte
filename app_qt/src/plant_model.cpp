@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <utility>
 
+#include <QDate>
+#include <QLocale>
 #include <QPointer>
 
 #include "translator.h"
@@ -69,7 +71,8 @@ void PlantModel::showArchived(bool value) {
 }
 void PlantModel::refresh() { submit(Browse); }
 void PlantModel::submit(int kind, const QString& id, const QString& name,
-                        const QString& botanical, const QString& cultivar, const QString& destination) {
+                        const QString& botanical, const QString& cultivar, const QString& destination,
+                        int profile, const QString& acquiredOn) {
     if (_busy || kind < Browse || kind > RestoreSpecimen) return;
 
     _busy = true;
@@ -77,9 +80,12 @@ void PlantModel::submit(int kind, const QString& id, const QString& name,
     emit changed();
     const QPointer<PlantModel> receiver(this);
     mv::manage_plants({static_cast<mv::PlantAction::Kind>(kind), id.toLongLong(), destination.toLongLong(),
-                      name.toStdString(), botanical.toStdString(), cultivar.toStdString()},
+                      name.toStdString(), botanical.toStdString(), cultivar.toStdString(),
+                      profile < 0 ? std::nullopt : std::optional<mv::PlantProfile>(static_cast<mv::PlantProfile>(profile)),
+                      acquiredOn.isEmpty() ? std::nullopt : std::optional<std::string>(acquiredOn.toStdString()),
+                      /*replace_optional_metadata=*/true},
                      ts::get(ts::TextId::Plants_Default).toStdString(),
-                     [receiver, kind](mv::PlantsResult result) {
+                     [receiver, kind, id, hasName = !name.trimmed().isEmpty()](mv::PlantsResult result) {
         if (!receiver) return;
         receiver->_busy = false;
         if (result) {
@@ -89,12 +95,54 @@ void PlantModel::submit(int kind, const QString& id, const QString& name,
             receiver->rebuild();
             if (kind != Browse) emit receiver->saved();
         } else {
+            receiver->_errorAction = kind;
+            receiver->_errorId = id;
             const auto code = result.error().code;
             receiver->_error = ts::get(code == mv::MainverteError::Code::LastCollection
                 ? ts::TextId::Plants_LastCollection : code == mv::MainverteError::Code::CollectionNotEmpty
                 ? ts::TextId::Plants_NotEmpty : code == mv::MainverteError::Code::InvalidInput
-                ? ts::TextId::Plants_NameRequired : ts::TextId::Plants_Failed);
+                ? (hasName && (kind == UpdateSpecimen || kind == CreateSpecimen) ? ts::TextId::Specimen_InvalidDate : ts::TextId::Plants_NameRequired) : ts::TextId::Plants_Failed);
             emit receiver->changed();
         }
     });
+}
+
+QVariantMap PlantModel::specimen(const QString& id) const {
+    const auto found = std::ranges::find(_plants.specimens, id.toLongLong(), &mv::Specimen::id);
+    if (found == _plants.specimens.end()) return {};
+
+    const auto& plant = *found;
+    QString duration;
+    QString acquired;
+    if (plant.acquired_on) {
+        acquired = QString::fromStdString(*plant.acquired_on);
+        const auto date = QDate::fromString(acquired, Qt::ISODate);
+        const auto today = QDate::currentDate();
+        if (date.isValid() && date <= today) {
+            int months = (today.year() - date.year()) * 12 + today.month() - date.month();
+            if (date.addMonths(months) > today) --months;
+
+            const auto days = date.daysTo(today);
+            duration = days == 0 ? ts::get(ts::TextId::Specimen_SinceToday)
+                : months >= 12 ? ts::get(ts::TextId::Specimen_SinceYears).replace(QStringLiteral("%1"), QString::number(months / 12))
+                : months >= 1 ? ts::get(ts::TextId::Specimen_SinceMonths).replace(QStringLiteral("%1"), QString::number(months))
+                : ts::get(ts::TextId::Specimen_SinceDays).replace(QStringLiteral("%1"), QString::number(days));
+        }
+    }
+
+    return {{QStringLiteral("id"), id}, {QStringLiteral("name"), QString::fromStdString(plant.display_name)},
+            {QStringLiteral("botanical"), QString::fromStdString(plant.botanical_name)},
+            {QStringLiteral("cultivar"), QString::fromStdString(plant.cultivar)},
+            {QStringLiteral("collectionId"), QString::number(plant.collection_id)},
+            {QStringLiteral("archived"), plant.archived},
+            {QStringLiteral("profile"), plant.profile ? static_cast<int>(*plant.profile) : -1},
+            {QStringLiteral("acquiredOn"), acquired}, {QStringLiteral("duration"), duration},
+            {QStringLiteral("acquiredLabel"), acquired.isEmpty() ? QString{} : QLocale().toString(QDate::fromString(acquired, Qt::ISODate), QLocale::LongFormat)}};
+}
+
+void PlantModel::discardSpecimenEditError(const QString& id) {
+    if (_busy || _errorAction != UpdateSpecimen || _errorId != id || _error.isEmpty()) return;
+
+    _error.clear();
+    emit changed();
 }
