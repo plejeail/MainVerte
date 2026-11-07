@@ -1,5 +1,6 @@
 // clazy:skip
 #include <atomic>
+#include <chrono>
 #include <cstdlib>
 #include <string>
 #include <thread>
@@ -7,7 +8,7 @@
 
 #include <doctest/doctest.h>
 
-#include "../src/mvlog/mvlog.inl.h"
+#include "../src/mvlog.h"
 
 
 namespace {
@@ -48,7 +49,7 @@ struct RestoreZone {
     long saved_dst_bias{};
     RestoreZone() {
         ::_tzset();
-        REQUIRE(::_get_dstbias(&saved_dst_bias) == 0);
+        saved_dst_bias = _dstbias;
     }
 #endif
 

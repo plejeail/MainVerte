@@ -3,16 +3,16 @@
 #include <cstddef>
 
 #include <QDebug>
+#include <QList>
 #include <QPointer>
-#include <QVariantList>
 
 #include "mv_core.h"
 #include "mv_definitions.h"
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 #include "translator.h"
 
 
-QVariantList SetupWizard::languages() const {
+QList<LanguageOption> SetupWizard::languages() const {
     return ts::language_options();
 }
 

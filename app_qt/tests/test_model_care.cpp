@@ -6,7 +6,7 @@
 #include <QCoreApplication>
 #include <doctest.h>
 
-#include "care_model.h"
+#include "model_care.h"
 #include "translator.h"
 
 namespace {
@@ -38,16 +38,24 @@ TEST_CASE("Care model waits for completion and preserves confirmed data on failu
     pending.clear();
     accept = true;
     ts::select_initial_language("en");
-    CareModel model;
+    Care_Model model;
     int saved = 0;
-    QObject::connect(&model, &CareModel::saved, [&] { ++saved; });
-    model.setSpecimenId("42");
+    QObject::connect(&model, &Care_Model::saved, [&] { ++saved; });
+    model.set_specimen_id("42");
     CHECK(model.busy());
     CHECK_FALSE(model.loaded());
-    CHECK(model.availableTypes().empty());
+    CHECK(model.available_types().empty());
     complete(std::vector<mv::CareNeed>{});
     CHECK(model.loaded());
-    CHECK(model.availableTypes().size() == 8);
+    CHECK(model.available_types().size() == 8);
+    const auto options = model.available_types();
+    CHECK(options[0].id.isEmpty());
+    CHECK(options[0].type == static_cast<int>(mv::NeedType::Watering));
+    CHECK(options[0].name == ts::get(ts::TextId::Care_Watering));
+    CHECK(options[0].description == ts::get(ts::TextId::Care_WateringInfo));
+    CHECK(options[0].icon == QUrl("qrc:/img/care/watering.svg"));
+    CHECK(options[0].action_label == ts::get(ts::TextId::Care_Watered));
+    CHECK(options[5].action_label.isEmpty());
     SUBCASE("accepted write failure") {}
     SUBCASE("queue refusal delivers failure") { accept = false; }
     model.add(0);
@@ -58,13 +66,15 @@ TEST_CASE("Care model waits for completion and preserves confirmed data on failu
     CHECK_FALSE(model.busy());
     CHECK_FALSE(model.error().isEmpty());
     CHECK(model.needs().empty());
-    CHECK(model.availableTypes().size() == 8);
+    CHECK(model.available_types().size() == 8);
     CHECK(saved == 0);
     accept = true;
     model.add(0);
     complete(std::vector<mv::CareNeed>{{1,42,mv::NeedType::Watering}});
     REQUIRE(model.needs().size() == 1);
-    CHECK(model.availableTypes().size() == 7);
+    CHECK(model.needs().front().id == "1");
+    CHECK(model.needs().front().name == options[0].name);
+    CHECK(model.available_types().size() == 7);
     CHECK(model.error().isEmpty());
     CHECK(saved == 1);
     model.add(0);
@@ -77,15 +87,15 @@ TEST_CASE("Care model waits for completion and preserves confirmed data on failu
     model.remove("1");
     complete(std::vector<mv::CareNeed>{});
     CHECK(model.needs().empty());
-    CHECK(model.availableTypes().size() == 8);
+    CHECK(model.available_types().size() == 8);
     CHECK(saved == 2);
 }
 
 TEST_CASE("Care model ignores stale callbacks and guards destroyed receivers") {
     pending.clear();
-    CareModel model;
-    model.setSpecimenId("42");
-    model.setSpecimenId("43");
+    Care_Model model;
+    model.set_specimen_id("42");
+    model.set_specimen_id("43");
     complete(std::vector<mv::CareNeed>{{1,42,mv::NeedType::Watering}});
     CHECK(model.needs().empty());
     CHECK(model.busy());
@@ -93,14 +103,14 @@ TEST_CASE("Care model ignores stale callbacks and guards destroyed receivers") {
     CHECK(pending.front().action.specimen_id == 43);
     complete(failure());
     CHECK_FALSE(model.loaded());
-    CHECK(model.availableTypes().empty());
+    CHECK(model.available_types().empty());
     CHECK_FALSE(model.error().isEmpty());
     model.refresh();
     complete(std::vector<mv::CareNeed>{});
     CHECK(model.loaded());
     {
-        CareModel temporary;
-        temporary.setSpecimenId("42");
+        Care_Model temporary;
+        temporary.set_specimen_id("42");
     }
     complete(std::vector<mv::CareNeed>{});
 }

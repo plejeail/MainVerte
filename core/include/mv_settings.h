@@ -22,7 +22,7 @@ struct Settings {
     /// No selected object; stored as SQL NULL for selection fields.
     static constexpr int64_t Undefined = 0;
 
-    bool        dark_theme{false};
+    bool        dark_theme_enabled{false};
     bool        debug_enabled{false};
     /// Minimum log severity; Debug matches the default in existing databases.
     LogLevel    log_level{LogLevel::Dbg};

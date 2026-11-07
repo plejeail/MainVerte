@@ -1,4 +1,6 @@
 build/
+CMakeUserPresets.json
+/.clangd
 $RECYCLE.BIN/
 .Trash-*/
 .cache/

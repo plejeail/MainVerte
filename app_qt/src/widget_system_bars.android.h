@@ -1,7 +1,6 @@
 #pragma once
 
-
+class App_Settings;
 class QWindow;
-class AppSettings;
 
-void configure_app_system_bars(AppSettings& settings, QWindow* setup_window);
+void configure_app_system_bars(App_Settings& settings, QWindow* setup_window);

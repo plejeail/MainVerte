@@ -1,3 +1,5 @@
+#if (ANDROID)
+
 #include "widget_system_bars.android.h"
 
 #include <QCoreApplication>
@@ -8,7 +10,7 @@
 #include <QWindow>
 
 #include "app_settings.h"
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 
 
 namespace {
@@ -46,14 +48,14 @@ void use_light_system_icons(bool dark_background) {
     });
 }
 
-}  // namespace
+}  //  namespace
 
-void configure_app_system_bars(AppSettings& settings, QWindow* setup_window) {
+void configure_app_system_bars(App_Settings& settings, QWindow* setup_window) {
     const QPointer<QWindow> wizard(setup_window);
     const auto update = [&settings, wizard] {
-        use_light_system_icons(settings.darkTheme() || (wizard && wizard->isVisible()));
+        use_light_system_icons(settings.dark_theme() || (wizard && wizard->isVisible()));
     };
-    QObject::connect(&settings, &AppSettings::themeChanged, &settings, update);
+    QObject::connect(&settings, &App_Settings::theme_changed, &settings, update);
     // Queued so Qt finishes applying the new window's system UI flags first.
     QObject::connect(qGuiApp, &QGuiApplication::focusWindowChanged, &settings, update, Qt::QueuedConnection);
     QObject::connect(qGuiApp, &QGuiApplication::applicationStateChanged, &settings,
@@ -69,3 +71,5 @@ void configure_app_system_bars(AppSettings& settings, QWindow* setup_window) {
 
     update();
 }
+
+#endif  // ANDROID

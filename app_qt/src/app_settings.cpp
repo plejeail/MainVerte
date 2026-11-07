@@ -5,53 +5,54 @@
 #include <string>
 #include <utility>
 
+#include <QList>
 #include <QObject>
 #include <QPointer>
-#include <QVariantList>
 
 #include "mv_core.h"
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 #include "translator.h"
 
 
 namespace {
 
 constexpr std::array LogLevels{
-    mvlog::Level::Debug, mvlog::Level::Info, mvlog::Level::Warning, mvlog::Level::Error};
+    mvlog::Level::Debug,
+    mvlog::Level::Info,
+    mvlog::Level::Warning,
+    mvlog::Level::Error,
+};
 
 }  //  namespace
 
-AppSettings::AppSettings(QObject* parent)
+App_Settings::App_Settings(QObject* parent)
 : QObject(parent)
 , _log_level(static_cast<int>(mv::settings().log_level))
 , _debug_enabled(mv::settings().debug_enabled)
-, _dark_theme(mv::settings().dark_theme)
-{
+, _dark_theme_enabled(mv::settings().dark_theme_enabled) {
     mvlog::set_level(LogLevels[_log_level]);
 }
 
-QVariantList AppSettings::languages() const {
+QList<LanguageOption> App_Settings::languages() const {
     return ts::language_options();
 }
 
-int AppSettings::languageIndex() const {
+int App_Settings::language_index() const {
     return ts::language_index();
 }
 
-void AppSettings::selectTheme(bool dark) {
-    if (_saving || dark == _dark_theme) {
+void App_Settings::select_theme(bool dark_theme_enabled) {
+    if (_saving || dark_theme_enabled == _dark_theme_enabled) {
         return;
     }
 
     auto settings = mv::settings();
-    settings.dark_theme = dark;
-    _dark_theme = dark;
+    settings.dark_theme_enabled = dark_theme_enabled;
+    _dark_theme_enabled = dark_theme_enabled;
     _saving = true;
     _save_failed = false;
-    emit themeChanged();
-    emit stateChanged();
 
-    const QPointer<AppSettings> receiver(this);
+    const QPointer<App_Settings> receiver(this);
     mv::save_settings(settings, [receiver](bool saved) {
         if (!receiver) {
             return;
@@ -59,22 +60,22 @@ void AppSettings::selectTheme(bool dark) {
 
         receiver->_saving = false;
         receiver->_save_failed = !saved;
-        if (!saved) {
-            receiver->_dark_theme = mv::settings().dark_theme;
-            emit receiver->themeChanged();
+        if (saved) {
+            receiver->_dark_theme_enabled = mv::settings().dark_theme_enabled;
+            emit receiver->theme_changed();
         }
 
-        emit receiver->stateChanged();
+        emit receiver->state_changed();
     });
 }
 
-void AppSettings::selectLanguage(int index) {
+void App_Settings::select_language(int index) {
     const auto codes = ts::list_languages();
     if (_saving || index < 0 || static_cast<std::size_t>(index) >= codes.size()) {
         return;
     }
 
-    const std::string previous_language(ts::current_language());
+    std::string previous_language(ts::current_language());
     auto settings = mv::settings();
     settings.language = codes[index];
     if (!ts::select_language(settings.language)) {
@@ -83,30 +84,30 @@ void AppSettings::selectLanguage(int index) {
 
     _saving = true;
     _save_failed = false;
-    emit stateChanged();
-    emit languageChanged();
 
-    const QPointer<AppSettings> receiver(this);
+    const QPointer<App_Settings> receiver(this);
     mv::save_settings(settings,
     [receiver, previous_language=std::move(previous_language)](bool saved) {
         if (!receiver) {
             return;
         }
 
-        if (!saved) {
+        if (saved) {
+            emit receiver->state_changed();
+            emit receiver->language_changed();
+        } else {
             // Core retains the saved preference on failure, including an empty
             // system preference. Restore the effective language independently.
             ts::select_language(previous_language);
-            emit receiver->languageChanged();
         }
 
         receiver->_saving = false;
         receiver->_save_failed = !saved;
-        emit receiver->stateChanged();
+        emit receiver->state_changed();
     });
 }
 
-void AppSettings::selectLogLevel(int index) {
+void App_Settings::select_log_level(int index) {
     if (_saving || index < 0 || static_cast<std::size_t>(index) >= LogLevels.size() || index == _log_level) {
         return;
     }
@@ -119,10 +120,11 @@ void AppSettings::selectLogLevel(int index) {
     mvlog::set_level(LogLevels[index]);
     _saving = true;
     _save_failed = false;
-    emit logLevelChanged();
-    emit stateChanged();
-    const QPointer<AppSettings> receiver(this);
-    mv::save_settings(settings, [receiver, previous_level, previous_index](bool saved) {
+    emit log_level_changed();
+    emit state_changed();
+    const QPointer<App_Settings> receiver(this);
+    mv::save_settings(settings,
+    [receiver, previous_level, previous_index](bool saved) {
         if (!saved) {
             mvlog::set_level(previous_level);
         }
@@ -133,20 +135,20 @@ void AppSettings::selectLogLevel(int index) {
 
         if (!saved) {
             receiver->_log_level = previous_index;
-            emit receiver->logLevelChanged();
+            emit receiver->log_level_changed();
         }
 
         receiver->_saving = false;
         receiver->_save_failed = !saved;
-        emit receiver->stateChanged();
+        emit receiver->state_changed();
     });
 }
 
-int AppSettings::databaseVersion() const {
+int App_Settings::databaseVersion() const {
     return mv::database_version();
 }
 
-void AppSettings::selectDebugEnabled(bool enabled) {
+void App_Settings::select_debug_enabled(bool enabled) {
     if (_saving || enabled == _debug_enabled) {
         return;
     }
@@ -156,11 +158,12 @@ void AppSettings::selectDebugEnabled(bool enabled) {
     _debug_enabled = enabled;
     _saving = true;
     _save_failed = false;
-    emit debugEnabledChanged();
-    emit stateChanged();
+    emit debug_enabled_changed();
+    emit state_changed();
 
-    const QPointer<AppSettings> receiver(this);
-    mv::save_settings(settings, [receiver](bool saved) {
+    const QPointer<App_Settings> receiver(this);
+    mv::save_settings(settings,
+    [receiver](bool saved) {
         if (!receiver) {
             return;
         }
@@ -169,9 +172,9 @@ void AppSettings::selectDebugEnabled(bool enabled) {
         receiver->_save_failed = !saved;
         if (!saved) {
             receiver->_debug_enabled = mv::settings().debug_enabled;
-            emit receiver->debugEnabledChanged();
+            emit receiver->debug_enabled_changed();
         }
 
-        emit receiver->stateChanged();
+        emit receiver->state_changed();
     });
 }

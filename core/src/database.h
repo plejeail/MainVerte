@@ -29,6 +29,8 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <type_traits>
+#include <variant>
 
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
@@ -37,6 +39,34 @@
 
 struct sqlite3;
 struct sqlite3_stmt;
+
+class Query {
+public:
+    using query_variant_t = std::variant<std::monostate, int32_t, int64_t, double, std::string_view>;
+
+    ~Query();
+
+    bool prepare(sqlite3* handle, const char* sql);
+
+    bool bind(int32_t pos, std::string_view value);
+    bool bind(int32_t pos, double value);
+    bool bind(int32_t pos, int64_t value);
+    bool bind(int32_t pos, bool value);
+    bool bind_null(int32_t pos);
+
+    int step();
+    bool reset();
+
+    [[nodiscard]] bool done() const;
+
+    template <typename T>
+    [[nodiscard]] std::optional<T> column(int index) const;
+    template <typename T> requires std::is_scoped_enum_v<T>
+    [[nodiscard]] std::optional<T> column(int index) const;
+
+private:
+    sqlite3_stmt* _statement = nullptr;
+};
 
 class Database {
 public:
@@ -47,7 +77,6 @@ public:
     enum class State : int8_t { Uninitialized, Initialized, Running, Stopping, };
     enum class Error : int8_t { NotRunning };
 
-    Database();
     ~Database();
 
     bool initialize(const std::string& path);
@@ -66,20 +95,25 @@ public:
     std::optional<mv::Settings> read_settings();
     bool write_settings(const mv::Settings& settings);
 
+    mv::CareResult update_care(const mv::CareAction& action);
+    mv::PlantsResult update_plants(mv::id_t gardener, const mv::PlantAction& a, const std::string& initial);
 private:
     void thread_loop();
 
     template <size_t software_version> bool migrate_database(size_t current_version);
 
-    State                   _state = State::Uninitialized;
-    std::mutex              _mutex;
+    State           _state = State::Uninitialized;
+    std::mutex      _mutex;
     std::condition_variable _wake;
-    sqlite3*                _handle = nullptr;
-    std::deque<Job>         _jobs;
-    std::thread             _thread;
-    statement_ptr           _statement_create_gardener;
-    statement_ptr           _statement_read_settings;
-    statement_ptr           _statement_write_settings;
+    sqlite3*        _handle = nullptr;
+    std::deque<Job> _jobs;
+    std::thread     _thread;
+    Query           _statement_create_gardener;
+    Query           _statement_read_settings;
+    Query           _statement_write_settings;
+    Query           _statement_care_select;
+    Query           _statement_care_insert;
+    Query           _statement_care_remove;
 };
 
 namespace detail {

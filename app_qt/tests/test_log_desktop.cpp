@@ -15,7 +15,7 @@
 
 #include <doctest/doctest.h>
 
-#include "../src/mvlog/mvlog.h"
+#include "../src/mvlog.h"
 
 
 struct CountedLogValue {

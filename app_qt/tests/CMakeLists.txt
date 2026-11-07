@@ -13,7 +13,7 @@ if(MV_LOG_QT_TYPES_FORMAT)
 endif()
 
 add_executable(mainverte_log_date_tests test_log_date.cpp)
-target_link_libraries(mainverte_log_date_tests PRIVATE doctest::doctest_with_main project_warnings)
+target_link_libraries(mainverte_log_date_tests PRIVATE mainverte_mvlog doctest::doctest_with_main project_warnings)
 add_test(NAME mainverte_log_date COMMAND mainverte_log_date_tests)
 if(MINGW)
     get_filename_component(log_test_runtime_directory "${CMAKE_CXX_COMPILER}" DIRECTORY)
@@ -22,22 +22,26 @@ if(MINGW)
 endif()
 
 add_executable(mainverte_log_file_tests test_log_file_stream.cpp)
-target_link_libraries(mainverte_log_file_tests PRIVATE doctest::doctest_with_main project_warnings)
+target_link_libraries(mainverte_log_file_tests PRIVATE mainverte_mvlog doctest::doctest_with_main project_warnings)
 add_test(NAME mainverte_log_file COMMAND mainverte_log_file_tests)
 if(MINGW)
     set_tests_properties(mainverte_log_file PROPERTIES
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${log_test_runtime_directory}")
+    if(MV_LOG_QT_TYPES_FORMAT)
+        set_property(TEST mainverte_log_date mainverte_log_file APPEND PROPERTY
+            ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:${log_qt_bin_directory}")
+    endif()
 endif()
 
 if(NOT ANDROID)
     add_executable(mainverte_log_android_output_tests
-        test_log_android_output.cpp ../src/mvlog/mvlog.android.cpp)
+        test_log_android_output.cpp ../src/mvlog.cpp ../src/platfom.android.cpp)
     target_include_directories(mainverte_log_android_output_tests PRIVATE support)
     target_compile_definitions(mainverte_log_android_output_tests PRIVATE MV_LOG_QT_TYPES_FORMAT=0)
     target_link_libraries(mainverte_log_android_output_tests PRIVATE
         doctest::doctest_with_main project_warnings)
     add_test(NAME mainverte_log_android_output COMMAND mainverte_log_android_output_tests)
-    add_executable(mainverte_log_desktop_tests test_log_desktop.cpp ../src/mvlog/mvlog.cpp ../src/mvlog/mvlog.desktop.cpp)
+    add_executable(mainverte_log_desktop_tests test_log_desktop.cpp ../src/mvlog.cpp ../src/platform.desktop.cpp)
     target_link_libraries(mainverte_log_desktop_tests PRIVATE
         doctest::doctest_with_main project_warnings)
     target_compile_definitions(mainverte_log_desktop_tests PRIVATE MV_LOG_QT_TYPES_FORMAT=0)
@@ -61,10 +65,10 @@ set(app_translation_header "${CMAKE_CURRENT_BINARY_DIR}/../generated/generated_t
 set_source_files_properties("${app_translation_header}" PROPERTIES GENERATED TRUE)
 target_sources(mainverte_style_tests PRIVATE
     ../src/translator.cpp ../src/translator.h "${app_translation_header}"
-    ../src/plant_model.cpp ../src/plant_model.h ../src/care_model.cpp ../src/care_model.h ../src/platform.cpp)
+    ../src/model_plant.cpp ../src/model_plant.h ../src/model_care.cpp ../src/model_care.h ../src/platform.cpp)
 target_include_directories(mainverte_style_tests PRIVATE
     ../src "${CMAKE_CURRENT_BINARY_DIR}/../generated")
-add_dependencies(mainverte_style_tests appMainVerte_generate_translations)
+add_dependencies(mainverte_style_tests mainverte_app_qt_generate_translations)
 foreach(qml_file IN ITEMS Main.qml CollectionPage.qml SettingsPage.qml SpecimenDetailPage.qml CareNeedPage.qml)
     set_source_files_properties("../qml/${qml_file}" PROPERTIES QT_RESOURCE_ALIAS "${qml_file}")
 endforeach()
@@ -112,11 +116,11 @@ qt_add_resources(mainverte_style_tests "care_icons" PREFIX "/" BASE "${CMAKE_CUR
 
 # Controlled completion provider exercises pending, rejected and failed care writes.
 qt_add_executable(mainverte_care_model_tests
-    test_care_model.cpp ../src/care_model.cpp ../src/care_model.h
+    test_model_care.cpp ../src/model_care.cpp ../src/model_care.h
     ../src/translator.cpp ../src/translator.h "${app_translation_header}")
 target_include_directories(mainverte_care_model_tests PRIVATE
     ../src "${CMAKE_CURRENT_BINARY_DIR}/../generated" "${PROJECT_SOURCE_DIR}/core/include")
-add_dependencies(mainverte_care_model_tests appMainVerte_generate_translations)
+add_dependencies(mainverte_care_model_tests mainverte_app_qt_generate_translations)
 target_link_libraries(mainverte_care_model_tests PRIVATE
     Qt6::Quick mainverte_mvlog doctest::doctest project_warnings)
 add_test(NAME care_model_completion COMMAND mainverte_care_model_tests)

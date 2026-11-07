@@ -7,15 +7,13 @@
 #include <string_view>
 
 #include <QByteArray>
+#include <QList>
 #include <QLocale>
 #include <QQmlEngine>
 #include <QString>
-#include <QVariantList>
-#include <QVariantMap>
-#include <QQmlEngine>
 
 #include "generated_translations.hpp"
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 
 
 namespace {
@@ -37,17 +35,20 @@ std::array<std::string_view, ts::Lang_Count> ts::list_languages() {
     return res;
 }
 
-QVariantList ts::language_options() {
-    QVariantList result;
-    for (const auto code : ts::list_languages()) {
+QList<LanguageOption> ts::language_options() {
+    auto languages_list = ts::list_languages();
+
+    QList<LanguageOption> result;
+    result.reserve(languages_list.size());
+    for (const auto code : languages_list) {
         const auto language = QString::fromUtf8(code.data(), static_cast<int>(code.size()));
         const QLocale locale(language);
         const QString resource = QStringLiteral("qrc:/img/flag_%1.svg").arg(language);
         result.append(
-            QVariantMap{
-                {"code", language},
-                {"label", locale.nativeLanguageName()},
-                {"flag", resource}
+            LanguageOption{
+                .code  = language,
+                .label = locale.nativeLanguageName(),
+                .flag  = resource
             }
         );
     }

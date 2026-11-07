@@ -10,19 +10,20 @@
 #include <QQmlApplicationEngine>
 #include <QQuickStyle>
 #include <QStandardPaths>
-#include <QVariant>
-#include <QWindow>
 #include <Qt>
 #include <QtQml/QQmlExtensionPlugin>
+#include <QVariant>
+#include <QWindow>
 
 #include "app_settings.h"
 #include "mv_core.h"
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
+#include "platform.h"
 #include "tools.h"
 #include "translator.h"
 #include "widget_wizard_setup.h"
 
-#ifdef Q_OS_ANDROID
+#if defined(ANDROID)
 #include "widget_system_bars.android.h"
 #endif
 
@@ -36,11 +37,13 @@ void on_object_creation_failed() {
     QCoreApplication::exit(-1);
 }
 
-void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services, AppSettings& app_settings);
+void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services, App_Settings& app_settings);
 
-}  // namespace
+}  //  namespace
 
 int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
+    wait_for_debugger(argc, argv);
+
     Stopwatch sw_app_init("app init");
     QGuiApplication app(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("MainVerte"));
@@ -89,11 +92,11 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &app,    &on_object_creation_failed,
                      Qt::QueuedConnection);
-    // AppSettings applies the loaded log threshold before other startup logging.
-    auto* app_settings = new AppSettings(&engine);
+    // App_Settings applies the loaded log threshold before other startup logging.
+    auto* app_settings = new App_Settings(&engine);
     ts::select_initial_language(settings.language);
     mvlog::inf("ts language selected: {}", ts::current_language());
-    QObject::connect(app_settings, &AppSettings::languageChanged,
+    QObject::connect(app_settings, &App_Settings::language_changed,
                      &engine,      &QQmlEngine::retranslate);
     engine.setInitialProperties({{QStringLiteral("settings"), QVariant::fromValue(app_settings)}});
     auto* tokens = engine.singletonInstance<QObject*>("MainVerteStyle", "Tokens");
@@ -102,9 +105,9 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
         return EXIT_FAILURE;
     }
 
-    tokens->setProperty("dark", app_settings->darkTheme());
-    QObject::connect(app_settings, &AppSettings::themeChanged, tokens, [tokens, app_settings] {
-        tokens->setProperty("dark", app_settings->darkTheme());
+    tokens->setProperty("dark", app_settings->dark_theme());
+    QObject::connect(app_settings, &App_Settings::theme_changed, tokens, [tokens, app_settings] {
+        tokens->setProperty("dark", app_settings->dark_theme());
     });
     if (settings.current_gardener_id > 0) {
         engine.loadFromModule("MainVerte", "Main");
@@ -126,7 +129,7 @@ int main(int argc, char** argv) {  // NOLINT(misc-include-cleaner)
 
 namespace {
 
-void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services, AppSettings& app_settings) {
+void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services, App_Settings& app_settings) {
     auto* setup_wizard = new SetupWizard(core_services, &engine);
     QObject::connect(setup_wizard, &SetupWizard::languageChanged,
                      &engine,      &QQmlEngine::retranslate);
@@ -170,4 +173,4 @@ void run_setup_wizard(QQmlApplicationEngine& engine, mv::Services& core_services
     }
 }
 
-}  // namespace
+}  //  namespace

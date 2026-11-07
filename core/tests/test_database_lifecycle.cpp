@@ -133,7 +133,7 @@ TEST_CASE("An opening failure permits a successful retry on the same database ob
 TEST_CASE("Settings persist every field across database reopening and map zero to NULL") {
     DatabaseFile file;
     const mv::Settings settings{
-        .dark_theme = true,
+        .dark_theme_enabled = true,
         .debug_enabled = true,
         .log_level = mv::LogLevel::Wrn,
         .current_gardener_id = 42,
@@ -147,7 +147,7 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
         REQUIRE(defaults.has_value());
         CHECK(defaults->current_gardener_id == 0);
         CHECK(defaults->current_collection_id == 0);
-        CHECK_FALSE(defaults->dark_theme);
+        CHECK_FALSE(defaults->dark_theme_enabled);
         CHECK_FALSE(defaults->debug_enabled);
         CHECK(defaults->log_level == mv::LogLevel::Dbg);
         database.start();
@@ -172,11 +172,11 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
         CHECK(restored->current_gardener_id == 42);
         CHECK(restored->current_collection_id == 73);
         CHECK(restored->language == "fr");
-        CHECK(restored->dark_theme);
+        CHECK(restored->dark_theme_enabled);
         CHECK(restored->debug_enabled);
         CHECK(restored->log_level == mv::LogLevel::Wrn);
         auto updated = *restored;
-        updated.dark_theme = false;
+        updated.dark_theme_enabled = false;
         updated.debug_enabled = false;
         updated.current_gardener_id = 0;
         REQUIRE(database.write_settings(updated));
@@ -184,7 +184,7 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
         REQUIRE(partial.has_value());
         CHECK(partial->current_gardener_id == 0);
         CHECK(partial->current_collection_id == 73);
-        CHECK_FALSE(partial->dark_theme);
+        CHECK_FALSE(partial->dark_theme_enabled);
         CHECK_FALSE(partial->debug_enabled);
         CHECK(partial->log_level == mv::LogLevel::Wrn);
         REQUIRE(database.write_settings({}));
@@ -200,7 +200,7 @@ TEST_CASE("Settings persist every field across database reopening and map zero t
 TEST_CASE("Settings errors preserve values and cached statements recover") {
     Database database;
     mv::Settings settings{};
-    settings.dark_theme = true;
+    settings.dark_theme_enabled = true;
     settings.current_gardener_id = 42;
     settings.current_collection_id = 73;
     REQUIRE(database.initialize(":memory:"));
@@ -225,7 +225,7 @@ TEST_CASE("Settings errors preserve values and cached statements recover") {
     REQUIRE(retained.has_value());
     CHECK(retained->current_gardener_id == 42);
     CHECK(retained->current_collection_id == 73);
-    CHECK(retained->dark_theme);
+    CHECK(retained->dark_theme_enabled);
     CHECK(run_job(database, [](sqlite3* handle) {
         for (auto* statement = sqlite3_next_stmt(handle, nullptr); statement;
              statement = sqlite3_next_stmt(handle, statement)) {
@@ -251,7 +251,7 @@ TEST_CASE("Settings errors preserve values and cached statements recover") {
     REQUIRE(retained.has_value());
     CHECK(retained->current_gardener_id == 42);
     CHECK(retained->current_collection_id == 73);
-    CHECK(retained->dark_theme);
+    CHECK(retained->dark_theme_enabled);
     REQUIRE(run_job(database, [](sqlite3* handle) {
         return sqlite3_exec(handle, "DROP TABLE settings;", nullptr, nullptr, nullptr);
     }) == SQLITE_OK);

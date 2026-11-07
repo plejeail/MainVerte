@@ -91,6 +91,7 @@ mv::Settings mv::settings() {
 
 bool mv::save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callback) {
     assert(services_instance != nullptr);
+
     auto completion = std::make_shared<MoveOnlyFunction<void(bool)>>(std::move(callback));
     const auto cached = service::settings();
     const bool preserve_selection = settings.current_gardener_id == cached.current_gardener_id &&
@@ -127,6 +128,7 @@ bool mv::save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> ca
 bool mv::complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback, std::string initial_collection_name) {
     assert(services_instance != nullptr);
     assert(callback);
+
     if (name.empty()) {
         log_wrn("Gardener not created: empty gardener name");
         return false;
@@ -189,6 +191,42 @@ bool mv::create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)
     if (!accepted) {
         dispatch_result(std::move(*completion), GardenerResult(std::unexpected(
             MainverteError{.code = MainverteError::Code::NotRunning, .message = "Database is not running"})));
+    }
+
+    return accepted;
+}
+
+bool mv::manage_care(CareAction action, MoveOnlyFunction<void(CareResult)> callback) {
+    assert(callback);
+    auto done = std::make_shared<MoveOnlyFunction<void(CareResult)>>(std::move(callback));
+    const bool accepted = service::database().submit([action, done](sqlite3* db) {
+        auto result = service::database().update_care(action);
+        platform::dispatch_callback([done, result = std::move(result)]() mutable { (*done)(std::move(result)); });
+    });
+
+    if (!accepted) {
+        platform::dispatch_callback([done] { (*done)(std::unexpected(MainverteError{MainverteError::Code::NotRunning, "Database is not running"})); });
+    }
+
+    return accepted;
+}
+
+bool mv::manage_plants(PlantAction action, std::string initial, MoveOnlyFunction<void(PlantsResult)> callback) {
+    assert(callback);
+    auto done = std::make_shared<MoveOnlyFunction<void(PlantsResult)>>(std::move(callback));
+    const auto gardener = settings().current_gardener_id;
+    const bool accepted = service::database().submit([action = std::move(action), initial = std::move(initial), gardener, done](sqlite3* db) {
+        auto result = service::database().update_plants(gardener, action, initial);
+        platform::dispatch_callback([result = std::move(result), done, gardener]() mutable {
+            if (result) {
+                service::update_collection_selection(gardener, result->selected);
+            }
+
+            (*done)(std::move(result));
+        });
+    });
+    if (!accepted) {
+        platform::dispatch_callback([done] { (*done)(std::unexpected(MainverteError{MainverteError::Code::NotRunning, "Database is not running"})); });
     }
 
     return accepted;

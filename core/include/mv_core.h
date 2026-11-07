@@ -10,10 +10,8 @@
 #include <string>
 #include <string_view>
 
-#include "mv_care.h"
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
-#include "mv_plants.h"
 #include "mv_settings.h"
 
 
@@ -82,18 +80,18 @@ private:
     bool initialized{false};
 };
 
-        /// Returns a copy of the loaded settings. Requires successful initialization.
-        /// Call on the owner thread, as for save_settings().
+/// Returns a copy of the loaded settings. Requires successful initialization.
+/// Call on the owner thread, as for save_settings().
 [[nodiscard]] Settings settings();
 
 /// Schema version used by a successfully initialized database.
 [[nodiscard]] int database_version();
 
-        /// Queues a write on the database worker; returns whether the job was accepted.
-        /// On success, updates the in-memory copy through platform::dispatch_callback.
-        /// An optional callback receives persistence success on the owner thread,
-        /// including false for refused submissions.
-        /// Requires successful initialization and a call on the owner thread.
+/// Queues a write on the database worker; returns whether the job was accepted.
+/// On success, updates the in-memory copy through platform::dispatch_callback.
+/// An optional callback receives persistence success on the owner thread,
+/// including false for refused submissions.
+/// Requires successful initialization and a call on the owner thread.
 bool save_settings(const Settings& settings, MoveOnlyFunction<void(bool)> callback = {});
 
 /// Inserts a gardener and delivers its ID and name through platform::dispatch_callback.
@@ -113,5 +111,22 @@ bool create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)> ca
 /// errors are delivered through platform::dispatch_callback; false means refused.
 bool complete_setup(std::string name, std::string language, MoveOnlyFunction<void(GardenerResult)> callback,
                     std::string initial_collection_name = {});
+
+// Owner-thread submission; requires initialized Services and a nonempty callback.
+// Core owns inputs and results. Accepted jobs run on the existing SQLite worker.
+// All outcomes (including queue rejection) are dispatched through platform callbacks.
+// The return value reports queue acceptance only. Discarding delivery does not cancel writes.
+// IDs are scoped to the current gardener captured at submission and specimen_id.
+// List/Add/Delete return the committed specimen list; Get returns one need.
+// Duplicate types are allowed. No events or scheduling state are created.
+bool manage_care(CareAction action, MoveOnlyFunction<void(CareResult)> callback);
+
+// Browse returns collections plus all active/archived specimens of the selected
+// collection. GetSpecimen returns one owned specimen by id (across collections).
+// ListSpecimens uses id as a collection ID without changing persisted selection.
+// Every successful mutation returns a fresh selected-collection snapshot.
+// No operation permanently deletes specimens.
+bool manage_plants(PlantAction action, std::string initial_collection_name,
+                   MoveOnlyFunction<void(PlantsResult)> callback);
 
 }  //  namespace mv

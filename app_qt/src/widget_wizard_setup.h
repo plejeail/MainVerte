@@ -1,16 +1,17 @@
 #pragma once
 
+#include <QList>
 #include <QObject>
 #include <QString>
-#include <QVariantList>
 
+#include "language_option.h"
 #include "mv_core.h"
 
 
 /// Completes gardener setup atomically through Core services.
 class SetupWizard final : public QObject {
     Q_OBJECT
-    Q_PROPERTY(QVariantList languages READ languages CONSTANT)
+    Q_PROPERTY(QList<LanguageOption> languages READ languages CONSTANT)
     Q_PROPERTY(int languageIndex READ languageIndex NOTIFY languageChanged)
     Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
 
@@ -19,8 +20,9 @@ public:
         : QObject(parent), _services(services) {}
 
     [[nodiscard]] bool busy() const { return _busy; }
-    [[nodiscard]] QVariantList languages() const;
+    [[nodiscard]] QList<LanguageOption> languages() const;
     [[nodiscard]] int languageIndex() const;
+
     Q_INVOKABLE void selectLanguage(int index);
     Q_INVOKABLE void complete_setup(const QString& name);
 

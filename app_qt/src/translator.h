@@ -3,13 +3,14 @@
 #include <array>
 #include <string_view>
 
+#include <QList>
 #include <QObject>
 #include <QString>
-#include <QVariantList>
 #include <QtContainerFwd>
 #include <QtQmlIntegration/qqmlintegration.h>
 
 #include "generated_translations.hpp"
+#include "language_option.h"
 
 
 namespace ts {
@@ -19,7 +20,7 @@ static constexpr auto Lang_Count = mv::i18n::languages.size();
 
 std::array<std::string_view, Lang_Count> list_languages();
 
-QVariantList language_options();
+QList<LanguageOption> language_options();
 int language_index();
 
 // not thread-wise

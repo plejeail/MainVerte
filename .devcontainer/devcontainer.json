@@ -1,0 +1,15 @@
+{
+  "name": "MainVerte",
+  "build": {
+    "dockerfile": "../Dockerfile.nogit",
+    "context": ".."
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "llvm-vs-code-extensions.vscode-clangd",
+        "ms-vscode.cmake-tools"
+      ]
+    }
+  }
+}

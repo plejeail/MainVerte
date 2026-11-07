@@ -1,18 +1,28 @@
 #pragma once
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <cassert>
 #include <chrono>
+#include <csignal>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
+#include <ctime>
 #include <filesystem>
 #include <format>
 #include <functional>
+#include <limits>
+#include <mutex>
 #include <ratio>
-#include <string>
 #include <string_view>
+#include <string>
+#include <system_error>
 #include <utility>
+#include <vector>
 
 #include <QByteArray>
 #include <QByteArrayView>
@@ -21,6 +31,7 @@
 #include <QDir>
 #include <QGuiApplication>
 #include <QIcon>
+#include <QList>
 #include <QLocale>
 #include <QMetaObject>
 #include <QObject>
@@ -32,15 +43,14 @@
 #include <QStandardPaths>
 #include <QString>
 #include <QStringList>
-#include <QStringView>
-#include <QVariantList>
-#include <QVariantMap>
-#include <QWindow>
 #include <Qt>
 #include <QtContainerFwd>
 #include <QtQml/QQmlExtensionPlugin>
 #include <QtQmlIntegration/qqmlintegration.h>
+#include <QVariantList>
+#include <QVariantMap>
+#include <QWindow>
 
-#ifdef Q_OS_ANDROID
+#if (ANDROID)
 #include <QJniObject>
 #endif

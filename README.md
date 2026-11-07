@@ -28,7 +28,161 @@ git submodule update --init --recursive
 
 Run this command again after pulling a change that updates the submodule revision.
 
-## Build and test
+## Windows / Android workflow (VS Code and command line)
+
+The workflow uses Python >= 3.9 and its standard library, with no PowerShell or
+third-party Python package dependency. VS Code tasks use the interpreter that
+runs the setup script.
+
+From the repository root, generate the local presets and VS Code configuration:
+
+```powershell
+python tools/setup_workflow.py
+```
+
+The defaults match Qt `C:/Qt/6.12.0`, MinGW `mingw1310_64`, LLVM in
+`C:/Program Files/LLVM/bin`, JDK 21, Android SDK under `%LOCALAPPDATA%`,
+NDK `29.0.14206865`, and Qt Creator's clazy-standalone. Override these with
+`--qt-root`, `--qt-version`, `--sdk`, `--ndk`, `--jdk`, `--llvm`, or `--clazy`.
+CMake and CTest are selected explicitly from `%USERPROFILE%/Documents/System/bin`,
+including in VS Code; override this directory with `--tools-bin`. This directory
+also comes first in the workflow and preset `PATH`. Ninja remains the Qt-supplied
+executable selected by the presets.
+The script checks the tools before generating files. Re-running it replaces
+`CMakeUserPresets.json` and `.vscode/{settings,tasks,launch,mainverte-tools}.json`;
+these machine-local files are ignored by Git. Keep custom editor settings elsewhere
+or copy them before re-running setup.
+
+| Preset | Build directory |
+| --- | --- |
+| `desktop-x86_64-debug` | `build/desktop_x86_64/Debug` |
+| `desktop-x86_64-release` | `build/desktop_x86_64/Release` |
+| `desktop-x86_64-profile` | `build/desktop_x86_64/RelWithDebInfo` |
+| `android-x86_64-debug` | `build/android_x86_64/Debug` |
+| `android-arm64-debug` | `build/android_arm64/Debug` |
+| `android-arm64-release` | `build/android_arm64/Release` |
+
+Here x86 means **x86_64**, matching the installed desktop kit and MainVertePhone;
+ARM means **arm64-v8a**. Separate configuration subdirectories prevent Debug and
+Release caches from overwriting each other. Profile is CMake's `RelWithDebInfo`.
+Release also retains native debug symbols; optimized code can make stepping and
+local variables less predictable.
+
+Build or test with the wrapper (which prepares Qt/MinGW runtime paths):
+
+```powershell
+python tools/workflow.py --action build --preset desktop-x86_64-debug
+python tools/workflow.py --action test --preset desktop-x86_64-debug
+python tools/workflow.py --action build --preset android-arm64-release
+python tools/workflow.py --action package --preset android-arm64-release
+```
+
+The `test` action builds all desktop test executables before running CTest with
+failure output and rejecting an empty test selection. Android presets disable host
+CTest tests. Plain CMake commands also work: `cmake --preset <preset>` followed
+by `cmake --build --preset <preset>`. The build preset builds the application;
+`<desktop-preset>-tests` builds all test executables.
+For Android, `build` compiles the native library and `package` creates the APK
+without requiring a device. APKs are under the selected build directory's
+`app_qt/android-build/build/outputs/apk/`. Both `deploy` and F5 also package it.
+
+In VS Code, select **CMake: Select Configure Preset**. Use **Tasks: Run Task** for
+build/test/deploy, or select one of the six configurations in **Run and Debug**
+and press **F5**. Required extensions are CMake Tools (`ms-vscode.cmake-tools`),
+C/C++ (`ms-vscode.cpptools`, desktop GDB), clangd
+(`llvm-vs-code-extensions.vscode-clangd`), and CodeLLDB (`vadimcn.vscode-lldb`,
+Android native debugging). The generated settings disable duplicate C/C++
+IntelliSense and use LLVM clangd. CMake Tools automatically reconfigures when
+the configure preset changes. The local presets load `tools/clangd.cmake`, which
+generates an ignored `.clangd` at the repository root pointing directly to that
+build's compilation database. clangd reloads this configuration when it changes;
+Python configure/build tasks use the same mechanism. Switching between
+desktop and Android therefore needs no manual clangd path change. The project's
+background index is kept separately for every build, for example:
+
+```text
+build/desktop_x86_64/Debug/.cache/clangd/index/
+build/desktop_x86_64/Release/.cache/clangd/index/
+build/android_x86_64/Debug/.cache/clangd/index/
+build/android_arm64/Debug/.cache/clangd/index/
+```
+
+Standard/system headers without a compilation database can still use clangd's
+global user cache. After successful configuration, CMake Tools (or the Python
+wrapper) also copies the database to the ignored root `compile_commands.json`.
+This copy triggers the installed clangd extension's built-in file watcher:
+`clangd.onConfigChanged=restart` and `clangd.onConfigChangedForceEnable=true`.
+The extension debounces changes for about two seconds, then restarts its server
+without prompting. The actual database and project cache still come from the
+build directory selected in `.clangd`. A failed Python configure does not
+publish a new notification copy. After applying these editor settings for the
+first time, run **clangd: Restart language server** once to activate the watcher.
+Changing only the build target within a preset (for example, app versus tests)
+uses the same database, which already contains all its targets.
+The optional Qt QML extension provides QML
+editing/debugging support; the supplied F5 configurations debug **C++**.
+
+For clangd's MinGW system-header discovery, close existing VS Code instances and
+open the project with `python tools/workflow.py --action editor`, so its extension host
+inherits the compiler runtime path. An already-running VS Code instance can reuse
+its original environment.
+
+Start the emulator and deploy, or use a USB-debugging-enabled physical phone:
+
+```powershell
+python tools/workflow.py --action emulator
+adb devices -l
+python tools/workflow.py --action deploy --preset android-x86_64-debug --serial emulator-5554
+python tools/workflow.py --action deploy --preset android-arm64-debug --serial <phone-serial>
+```
+
+Wait until MainVertePhone has finished booting. Device selection accepts `--serial`
+or `ANDROID_SERIAL`; without either, exactly one authorized device must be connected.
+For F5, launch VS Code from a shell with `$env:ANDROID_SERIAL='<phone-serial>'`
+when multiple devices are connected. The wrapper checks the device ABI, packages
+with androiddeployqt, reinstalls while preserving app data, and launches the app.
+Release deployment uses `--release` and explicitly signs with the standard Android
+debug key, suitable for local testing. `package` leaves Release APKs unsigned;
+distribution signing requires your own keystore and is separate.
+
+Android F5 builds, deploys a debuggable APK, launches it, then attaches NDK
+`lldb-server` through adb on localhost port 5039. This also works with the ARM
+Release native library, retaining its optimization and symbols. The F5 launch
+passes `--wait-for-native-debugger` through Qt's `applicationArguments` intent
+extra. At the beginning of `main()`, this argument raises `SIGSTOP` before
+`QGuiApplication`, services, logging or database initialization. The wrapper waits
+for this stop before attaching LLDB, which suppresses delivery of the startup
+`SIGSTOP` on resume. Set a source breakpoint in the initialization code, then F5;
+the debugger installs it before initialization resumes. Normal deployment does
+not pass this argument.
+
+This does not cover Java/Qt library loading or static constructors executed
+before `main()`. Use Qt Creator's Android debugger for those stages or combined
+QML/native debugging. If a session is abandoned before attachment, the app stays
+paused; force-stop it from Android settings or with `adb -s <serial> shell am
+force-stop org.qtproject.example.appMainVerte`, then relaunch normally.
+Only one such debug session can use port 5039 at a time. Logs are written to
+`lldb-server.log` and `lldb-server-error.log` in the selected build directory.
+The debug action downloads the device's `app_process64` and `linker64` into
+`debug-sysroot` so LLDB can locate the application and Qt libraries inside the APK.
+
+Run source analysis explicitly after building the selected preset:
+
+```powershell
+python tools/workflow.py --action tidy --preset android-arm64-debug --file app_qt/src/main.cpp
+python tools/workflow.py --action clazy --preset android-arm64-debug --file app_qt/src/main.cpp
+python tools/workflow.py --action format --file app_qt/src/main.cpp
+```
+
+`format` checks with LLVM clang-format (`--dry-run --Werror`) and the repository's
+`.clang-format`, without rewriting files. clangd formatting uses its bundled
+formatter with the same policy. Analysis uses the selected compilation database; differences
+between LLVM/clazy and the kit compiler can require matching analyzer versions.
+The wrapper writes a separate analysis database with textual copies of forced
+includes, avoiding binary PCH incompatibilities. Test workflow generation with
+`python -B tools/tests/test_workflow.py` (Python 3.9+; no third-party packages).
+
+## Build and test (manual configuration)
 
 Run the following commands from the repository root in an environment configured
 for your Qt desktop kit and compiler. For a multi-config generator such as Visual
@@ -54,7 +208,7 @@ ctest --test-dir build/desktop --output-on-failure --no-tests=error
 
 Use only one of these configurations for a given build directory. Keep separate
 build directories for each platform, compiler and Android ABI; never reuse a
-CMake cache across kits. The application target is `appMainVerte`; the Core
+CMake cache across kits. The application target is `mainverte_app_qt`; the Core
 library target is `mainverte_core`.
 
 On Windows, ensure the Qt kit's `bin` directory and the matching compiler's
@@ -79,13 +233,13 @@ $env:QT_QPA_FONTDIR = Join-Path $env:WINDIR "Fonts"
 
 To build and run on Android, open the root `CMakeLists.txt` in Qt Creator, select
 the Android kit and ABI, and use a separate build directory (for example,
-`build/android-arm64`). Build `appMainVerte` and run it on a matching device or
+`build/android-arm64`). Build `mainverte_app_qt` and run it on a matching device or
 emulator. Desktop builds and tests do not validate Android deployment.
 
 ## Visual style and component showcase
 
 The app uses the bundled MainVerte Qt Quick Controls style. Appearance settings
-switch between light and dark themes at runtime. Run `appMainVerte --showcase`
+switch between light and dark themes at runtime. Run `mainverte_app_qt --showcase`
 to inspect the separate component gallery without opening the journal database.
 See [the design system guide](docs/design-system.md) for tokens, component
 coverage, extension rules, and validation commands.
@@ -188,7 +342,7 @@ changes. Headers are written under the build directory at
 them explicitly:
 
 ```powershell
-cmake --build build/desktop --config Debug --target appMainVerte_generate_translations
+cmake --build build/desktop --config Debug --target mainverte_app_qt_generate_translations
 ```
 
 The single generated header, `generated_translations.hpp`, exposes
@@ -274,7 +428,7 @@ Core regression tests use temporary databases. The Qt Quick suite also creates a
 isolated temporary database and exercises real Core completions, empty/populated
 grids, collection switching, validation/error feedback, details navigation,
 archival/restoration, and resizing. Run the regular CTest suites and
-`appMainVerte_qmllint` after building. Offscreen checks do not validate native
+`mainverte_app_qt_qmllint` after building. Offscreen checks do not validate native
 Windows/Android rendering, deployment, touch input, or accessibility services.
 
 M1 deliberately adds no journals, care schedules, measurements, species catalog,

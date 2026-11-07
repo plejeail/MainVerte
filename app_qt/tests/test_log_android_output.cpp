@@ -2,7 +2,8 @@
 #include <android/log.h>
 #include <doctest/doctest.h>
 
-#include "../src/mvlog/mvlog.inl.h"
+#include "../src/mvlog.h"
+#include "../src/platform.h"
 
 
 namespace {
@@ -37,7 +38,7 @@ TEST_CASE("Android output preserves the formatted record and maps priorities") {
              Example{mvlog::Level::Warning, ANDROID_LOG_WARN},
              Example{mvlog::Level::Error, ANDROID_LOG_ERROR}}) {
         const auto record = mvlog::detail::format_record(static_cast<char>(example.level), date, "ding dong");
-        mvlog::detail::platform_output(example.level, record);
+        platform_output(example.level, record);
         CHECK(captured_priority == example.priority);
         CHECK(captured_tag == "MainVerte");
         CHECK(captured_text == record);

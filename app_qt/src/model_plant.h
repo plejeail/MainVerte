@@ -7,7 +7,8 @@
 #include <QVariantMap>
 #include <QtQmlIntegration/qqmlintegration.h>
 
-#include "mv_plants.h"
+#include "mv_definitions.h"
+
 
 class PlantModel : public QAbstractListModel {
     Q_OBJECT
@@ -18,6 +19,7 @@ class PlantModel : public QAbstractListModel {
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(QString error READ error NOTIFY changed)
     Q_PROPERTY(bool archived READ archived WRITE showArchived NOTIFY changed)
+
 public:
     enum Action { Browse, CreateCollection, RenameCollection, SelectCollection,
                   DeleteCollection, CreateSpecimen, UpdateSpecimen, MoveSpecimen,

@@ -6,7 +6,7 @@
 #include <QGuiApplication>
 #include <QMetaObject>
 
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 #include "mv_move_only_function.h"
 
 

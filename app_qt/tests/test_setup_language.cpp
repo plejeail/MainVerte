@@ -12,6 +12,7 @@
 #include <QLocale>
 #include <QQmlApplicationEngine>
 #include <QQmlComponent>
+#include <QQmlExpression>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QVariant>
@@ -19,7 +20,7 @@
 #include <sqlite3.h>
 
 #include "app_settings.h"
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 #include "translator.h"
 #include "widget_wizard_setup.h"
 
@@ -103,10 +104,10 @@ TEST_CASE("German and Spanish expose translated labels and embedded flags") {
         const bool german = ts::current_language() == "de";
         CHECK(ts::get(ts::TextId::Settings_LanguageLabel) == (german ? "Sprache" : "Idioma"));
         CHECK(ts::get(ts::TextId::Theme_Dark) == (german ? "Dunkel" : "Oscuro"));
-        const auto option = options[ts::language_index()].toMap();
-        CHECK(option.value("code").toString() == QString::fromUtf8(code));
-        CHECK_FALSE(option.value("label").toString().isEmpty());
-        const auto flag = option.value("flag").toString();
+        const auto& option = options[ts::language_index()];
+        CHECK(option.code == QString::fromUtf8(code));
+        CHECK_FALSE(option.label.isEmpty());
+        const auto flag = option.flag;
         CHECK(QFile::exists(flag.mid(3))); // qrc:/ becomes :/ for QFile.
     }
 }
@@ -163,18 +164,18 @@ TEST_CASE("settings language applies immediately and persists without changing t
         creation.exec();
         REQUIRE(gardener_id > 0);
         ts::select_language("en");
-        AppSettings settings;
+        App_Settings settings;
         REQUIRE(settings.languages().size() == 4);
-        CHECK(settings.languageIndex() == 0);
+        CHECK(settings.language_index() == 0);
         CHECK_FALSE(settings.saving());
         CHECK(mv::settings().language.empty());
-        settings.selectLanguage(-1);
-        settings.selectLanguage(100);
+        settings.select_language(-1);
+        settings.select_language(100);
         CHECK_FALSE(settings.saving());
         CHECK(mv::settings().language.empty());
 
         QQmlEngine engine;
-        QObject::connect(&settings, &AppSettings::languageChanged, &engine, &QQmlEngine::retranslate);
+        QObject::connect(&settings, &App_Settings::language_changed, &engine, &QQmlEngine::retranslate);
         QQmlComponent component(&engine);
         component.setData(QByteArray("import QtQml\nimport WizardTest\nQtObject { property string label: Ts.get(")
             + QByteArray::number(static_cast<int>(ts::TextId::Settings_LanguageLabel)) + ") }", QUrl());
@@ -184,19 +185,19 @@ TEST_CASE("settings language applies immediately and persists without changing t
         CHECK(object->property("label").toString() == "Language");
 
         QEventLoop saving;
-        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+        QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
             if (!settings.saving()) saving.quit();
         });
         QTimer::singleShot(5000, &saving, &QEventLoop::quit);
-        settings.selectLanguage(1);
+        settings.select_language(1);
         CHECK(settings.saving());
         CHECK(ts::current_language() == "fr");
         CHECK(object->property("label").toString() == "Langue");
-        settings.selectLanguage(0); // Ignore further activation while a save is pending.
+        settings.select_language(0); // Ignore further activation while a save is pending.
         CHECK(ts::current_language() == "fr");
         saving.exec();
         REQUIRE_FALSE(settings.saving());
-        CHECK_FALSE(settings.saveFailed());
+        CHECK_FALSE(settings.save_failed());
         CHECK(mv::settings().language == "fr");
         CHECK(mv::settings().current_gardener_id == gardener_id);
     }
@@ -206,8 +207,8 @@ TEST_CASE("settings language applies immediately and persists without changing t
         CHECK(mv::settings().language == "fr");
         CHECK(mv::settings().current_gardener_id == gardener_id);
         ts::select_initial_language(mv::settings().language);
-        AppSettings settings;
-        CHECK(settings.languageIndex() == 1);
+        App_Settings settings;
+        CHECK(settings.language_index() == 1);
     }
 }
 
@@ -215,9 +216,9 @@ TEST_CASE("settings page exposes the language selector and retranslates after ac
     mv::Services services;
     REQUIRE(services.initialize(":memory:"));
     ts::select_language("en");
-    AppSettings settings;
+    App_Settings settings;
     QQmlEngine engine;
-    QObject::connect(&settings, &AppSettings::languageChanged, &engine, &QQmlEngine::retranslate);
+    QObject::connect(&settings, &App_Settings::language_changed, &engine, &QQmlEngine::retranslate);
     QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
     REQUIRE(source.open(QIODevice::ReadOnly));
     QQmlComponent component(&engine);
@@ -236,9 +237,15 @@ TEST_CASE("settings page exposes the language selector and retranslates after ac
     auto* selector = page->findChild<QObject*>("languageSelector");
     REQUIRE(selector);
     CHECK(selector->property("currentIndex").toInt() == 0);
+    CHECK(selector->property("count").toInt() == 4);
+    CHECK(selector->property("currentText").toString() == settings.languages().front().label);
+    QQmlExpression optionFields(engine.rootContext(), page.get(),
+        "settings.languages[0].code + '|' + settings.languages[0].flag");
+    CHECK(optionFields.evaluate().toString() == "en|qrc:/img/flag_en.svg");
+    CHECK_FALSE(optionFields.hasError());
     CHECK(mv::settings().language.empty()); // Opening the page must not create a preference.
     QEventLoop saving;
-    QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+    QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
         if (!settings.saving()) saving.quit();
     });
     QTimer::singleShot(5000, &saving, &QEventLoop::quit);
@@ -246,19 +253,19 @@ TEST_CASE("settings page exposes the language selector and retranslates after ac
     CHECK(page->property("title").toString() == "Paramètres");
     saving.exec();
     CHECK_FALSE(settings.saving());
-    CHECK_FALSE(settings.saveFailed());
+    CHECK_FALSE(settings.save_failed());
     CHECK(mv::settings().language == "fr");
     auto* theme = page->findChild<QObject*>("themeSelector");
     REQUIRE(theme);
     CHECK(theme->property("currentIndex").toInt() == 0);
     REQUIRE(QMetaObject::invokeMethod(theme, "activated", Q_ARG(int, 1)));
-    CHECK(settings.darkTheme());
+    CHECK(settings.dark_theme());
     CHECK(theme->property("currentIndex").toInt() == 1);
     QTimer::singleShot(5000, &saving, &QEventLoop::quit);
     saving.exec();
     REQUIRE_FALSE(settings.saving());
-    CHECK_FALSE(settings.saveFailed());
-    CHECK(mv::settings().dark_theme);
+    CHECK_FALSE(settings.save_failed());
+    CHECK(mv::settings().dark_theme_enabled);
     CHECK(mv::settings().language == "fr");
 }
 
@@ -287,6 +294,8 @@ TEST_CASE("setup page uses its injected wizard for language selection and errors
     auto* selector = page->findChild<QObject*>("languageSelector");
     REQUIRE(selector);
     CHECK(selector->property("currentIndex").toInt() == 0);
+    CHECK(selector->property("count").toInt() == 4);
+    CHECK(selector->property("currentText").toString() == wizard.languages().front().label);
     REQUIRE(QMetaObject::invokeMethod(selector, "activated", Q_ARG(int, 1)));
     CHECK(wizard.languageIndex() == 1);
     CHECK(selector->property("currentIndex").toInt() == 1);
@@ -321,31 +330,31 @@ TEST_CASE("theme applies immediately and persists across restarts without changi
         {
             mv::Services services;
             REQUIRE(services.initialize(path));
-            AppSettings settings;
-            CHECK(settings.darkTheme() == !dark);
+            App_Settings settings;
+            CHECK(settings.dark_theme() == !dark);
             QEventLoop saving;
-            QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+            QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
                 if (!settings.saving()) saving.quit();
             });
             QTimer::singleShot(5000, &saving, &QEventLoop::quit);
-            settings.selectTheme(dark);
-            CHECK(settings.darkTheme() == dark);
+            settings.select_theme(dark);
+            CHECK(settings.dark_theme() == dark);
             CHECK(settings.saving());
-            settings.selectLanguage(1); // Theme and language share the pending-save guard.
-            settings.selectTheme(!dark);
-            CHECK(settings.darkTheme() == dark);
+            settings.select_language(1); // Theme and language share the pending-save guard.
+            settings.select_theme(!dark);
+            CHECK(settings.dark_theme() == dark);
             saving.exec();
             REQUIRE_FALSE(settings.saving());
-            CHECK_FALSE(settings.saveFailed());
-            CHECK(mv::settings().dark_theme == dark);
+            CHECK_FALSE(settings.save_failed());
+            CHECK(mv::settings().dark_theme_enabled == dark);
             CHECK(mv::settings().language.empty());
         }
         {
             mv::Services services;
             REQUIRE(services.initialize(path));
-            AppSettings settings;
-            CHECK(settings.darkTheme() == dark);
-            settings.selectTheme(dark);
+            App_Settings settings;
+            CHECK(settings.dark_theme() == dark);
+            settings.select_theme(dark);
             CHECK_FALSE(settings.saving());
             CHECK(mv::settings().language.empty());
         }
@@ -359,9 +368,9 @@ TEST_CASE("debug visibility unlocks after five version clicks and persists both 
     {
         mv::Services services;
         REQUIRE(services.initialize(path));
-        AppSettings settings;
-        CHECK_FALSE(settings.debugEnabled());
-        CHECK(settings.softwareVersion() == "0.1.0");
+        App_Settings settings;
+        CHECK_FALSE(settings.debug_enabled());
+        CHECK(settings.software_version() == "0.1.0");
         CHECK(settings.databaseVersion() == mv::database_version());
         QQmlEngine engine;
         QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
@@ -384,50 +393,50 @@ TEST_CASE("debug visibility unlocks after five version clicks and persists both 
         CHECK_FALSE(debug->property("visible").toBool());
         for (int click = 0; click < 4; ++click) {
             REQUIRE(QMetaObject::invokeMethod(page.get(), "versionClicked"));
-            CHECK_FALSE(settings.debugEnabled());
+            CHECK_FALSE(settings.debug_enabled());
         }
 
         QEventLoop saving;
-        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+        QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
             if (!settings.saving()) {
                 saving.quit();
             }
         });
         QTimer::singleShot(5000, &saving, &QEventLoop::quit);
         REQUIRE(QMetaObject::invokeMethod(page.get(), "versionClicked"));
-        CHECK(settings.debugEnabled());
+        CHECK(settings.debug_enabled());
         CHECK(debug->property("visible").toBool());
-        settings.selectDebugEnabled(false); // Ignore changes while the write is pending.
-        CHECK(settings.debugEnabled());
+        settings.select_debug_enabled(false); // Ignore changes while the write is pending.
+        CHECK(settings.debug_enabled());
         saving.exec();
         REQUIRE_FALSE(settings.saving());
-        REQUIRE_FALSE(settings.saveFailed());
+        REQUIRE_FALSE(settings.save_failed());
         CHECK(mv::settings().debug_enabled);
     }
 
     {
         mv::Services services;
         REQUIRE(services.initialize(path));
-        AppSettings settings;
-        REQUIRE(settings.debugEnabled());
+        App_Settings settings;
+        REQUIRE(settings.debug_enabled());
         QEventLoop saving;
-        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+        QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
             if (!settings.saving()) {
                 saving.quit();
             }
         });
         QTimer::singleShot(5000, &saving, &QEventLoop::quit);
-        settings.selectDebugEnabled(false);
+        settings.select_debug_enabled(false);
         saving.exec();
         REQUIRE_FALSE(settings.saving());
-        REQUIRE_FALSE(settings.saveFailed());
+        REQUIRE_FALSE(settings.save_failed());
     }
 
     {
         mv::Services services;
         REQUIRE(services.initialize(path));
-        AppSettings settings;
-        CHECK_FALSE(settings.debugEnabled());
+        App_Settings settings;
+        CHECK_FALSE(settings.debug_enabled());
     }
 }
 
@@ -475,22 +484,22 @@ TEST_CASE("failed language writes retain the saved preference across restart and
         mv::Services services;
         REQUIRE(services.initialize(path));
         CHECK(mv::settings().language == previous_preference);
-        AppSettings settings;
+        App_Settings settings;
         QEventLoop saving;
-        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+        QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
             if (!settings.saving()) {
                 saving.quit();
             }
         });
         QTimer::singleShot(5000, &saving, &QEventLoop::quit);
-        settings.selectLanguage(requested_index);
+        settings.select_language(requested_index);
         CHECK(settings.saving());
         CHECK(ts::current_language() == requested_language);
-        settings.selectLanguage(previous_index);
+        settings.select_language(previous_index);
         saving.exec();
         REQUIRE_FALSE(settings.saving());
-        CHECK(settings.saveFailed());
-        CHECK(settings.languageIndex() == previous_index);
+        CHECK(settings.save_failed());
+        CHECK(settings.language_index() == previous_index);
         CHECK(ts::current_language() == previous_effective);
         CHECK(mv::settings().language == previous_preference);
     }
@@ -508,18 +517,18 @@ TEST_CASE("failed language writes retain the saved preference across restart and
         mv::Services services;
         REQUIRE(services.initialize(path));
         CHECK(mv::settings().language == previous_preference);
-        AppSettings settings;
+        App_Settings settings;
         QEventLoop saving;
-        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+        QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
             if (!settings.saving()) {
                 saving.quit();
             }
         });
         QTimer::singleShot(5000, &saving, &QEventLoop::quit);
-        settings.selectLanguage(requested_index);
+        settings.select_language(requested_index);
         saving.exec();
         REQUIRE_FALSE(settings.saving());
-        CHECK_FALSE(settings.saveFailed());
+        CHECK_FALSE(settings.save_failed());
         CHECK(mv::settings().language == requested_language);
         CHECK(ts::current_language() == requested_language);
     }
@@ -542,24 +551,24 @@ TEST_CASE("log threshold and selector follow saved settings across navigation an
         REQUIRE(services.initialize(path));
         CHECK(static_cast<int>(mv::settings().log_level) == previous);
         mvlog::set_level(mvlog::Level::Error);
-        AppSettings settings;
-        CHECK(settings.logLevel() == previous);
+        App_Settings settings;
+        CHECK(settings.log_level() == previous);
         CHECK(mvlog::level() == levels[previous]);
         QEventLoop saving;
-        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+        QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
             if (!settings.saving()) {
                 saving.quit();
             }
         });
         QTimer::singleShot(5000, &saving, &QEventLoop::quit);
-        settings.selectLogLevel(index);
+        settings.select_log_level(index);
         CHECK(settings.saving());
-        CHECK(settings.logLevel() == index);
+        CHECK(settings.log_level() == index);
         CHECK(mvlog::level() == levels[index]);
-        settings.selectLogLevel(previous);
+        settings.select_log_level(previous);
         saving.exec();
         REQUIRE_FALSE(settings.saving());
-        CHECK_FALSE(settings.saveFailed());
+        CHECK_FALSE(settings.save_failed());
         CHECK(static_cast<int>(mv::settings().log_level) == index);
         QQmlEngine engine;
         QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
@@ -600,20 +609,20 @@ TEST_CASE("log threshold and selector follow saved settings across navigation an
     {
         mv::Services services;
         REQUIRE(services.initialize(path));
-        AppSettings settings;
-        CHECK(settings.logLevel() == 0);
+        App_Settings settings;
+        CHECK(settings.log_level() == 0);
         QEventLoop saving;
-        QObject::connect(&settings, &AppSettings::stateChanged, &saving, [&] {
+        QObject::connect(&settings, &App_Settings::state_changed, &saving, [&] {
             if (!settings.saving()) {
                 saving.quit();
             }
         });
         QTimer::singleShot(5000, &saving, &QEventLoop::quit);
-        settings.selectLogLevel(3);
+        settings.select_log_level(3);
         saving.exec();
         REQUIRE_FALSE(settings.saving());
-        CHECK(settings.saveFailed());
-        CHECK(settings.logLevel() == 0);
+        CHECK(settings.save_failed());
+        CHECK(settings.log_level() == 0);
         CHECK(mvlog::level() == mvlog::Level::Debug);
         CHECK(mv::settings().log_level == mv::LogLevel::Dbg);
     }

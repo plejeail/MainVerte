@@ -5,6 +5,7 @@ Checks: >
   -*,
   clang-analyzer-*,
   bugprone-*,
+  -bugprone-easily-swappable-parameters,
   -bugprone-exception-escape,
   -bugprone-signed-bitwise,
   misc-*,

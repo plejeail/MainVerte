@@ -7,7 +7,7 @@
 
 #include <doctest/doctest.h>
 
-#include "../src/mvlog/mvlog.inl.h"
+#include "../src/mvlog.h"
 
 
 namespace {

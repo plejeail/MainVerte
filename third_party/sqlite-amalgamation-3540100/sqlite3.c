@@ -20,7 +20,7 @@
 ** The content in this amalgamation comes from Fossil check-in
 ** 555e07ef33f69a0957d24d8e555b702464a1 with changes in files:
 **
-**    
+**
 */
 #ifndef SQLITE_AMALGAMATION
 #define SQLITE_CORE 1
@@ -5727,7 +5727,7 @@ SQLITE_API int sqlite3_data_count(sqlite3_stmt *pStmt);
 #define SQLITE_FLOAT    2
 #define SQLITE_BLOB     4
 #define SQLITE_NULL     5
-#ifdef SQLITE_TEXT
+#ifdef  SQLITE_TEXT
 # undef SQLITE_TEXT
 #else
 # define SQLITE_TEXT     3

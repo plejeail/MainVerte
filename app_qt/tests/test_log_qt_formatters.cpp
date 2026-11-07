@@ -1,7 +1,7 @@
 // clazy:skip
 #include <doctest/doctest.h>
 
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 
 
 TEST_CASE("Qt log formatters preserve UTF-8, views and formatting options") {

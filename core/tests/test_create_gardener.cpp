@@ -18,7 +18,6 @@
 #include "mv_core.h"
 #include "mv_definitions.h"
 #include "mv_move_only_function.h"
-#include "mv_plants.h"
 #include "services.h"
 
 
@@ -436,7 +435,7 @@ TEST_CASE("plant workflow preserves identities ownership and restart") {
         CHECK_FALSE(invoke({.kind=K::MoveSpecimen, .id=plant_id, .destination=9999}));
         CHECK(invoke({.kind=K::MoveSpecimen, .id=plant_id, .destination=destination}));
         auto appearance = mv::settings();
-        appearance.dark_theme = !appearance.dark_theme;
+        appearance.dark_theme_enabled = !appearance.dark_theme_enabled;
         REQUIRE(mv::manage_plants({.kind=K::SelectCollection, .id=destination}, "My Plants", [](mv::PlantsResult r) { CHECK(r); }));
         REQUIRE(mv::save_settings(appearance));
         REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
@@ -698,4 +697,65 @@ TEST_CASE("Specimen details and independent care needs persist across moves arch
         CHECK_FALSE(state->specimens.front().profile);
         CHECK_FALSE(state->specimens.front().acquired_on);
     }
+}
+
+TEST_CASE("Plant queries own text and preserve nullable metadata across repeated operations") {
+    mv::Services services;
+    REQUIRE(services.initialize(":memory:"));
+    REQUIRE(mv::complete_setup("Gardener", "fr", [](mv::GardenerResult result) { REQUIRE(result); }, "Plants"));
+    REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+    deliver_completions();
+
+    const auto invoke = [](mv::PlantAction action) {
+        std::optional<mv::PlantsResult> result;
+        REQUIRE(mv::manage_plants(std::move(action), "Plants", [&](mv::PlantsResult value) { result = std::move(value); }));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(result.has_value());
+        return std::move(*result);
+    };
+    using K = mv::PlantAction::Kind;
+    const auto collection = mv::settings().current_collection_id;
+    auto created = invoke({.kind=K::CreateSpecimen, .id=collection, .name="First",
+                           .botanical_name="Botanical", .cultivar="Cultivar",
+                           .profile=mv::PlantProfile::Herb, .acquired_on="2024-02-29"});
+    REQUIRE(created);
+    REQUIRE(created->specimens.size() == 1);
+    const auto id = created->specimens.front().id;
+    REQUIRE(invoke({.kind=K::CreateSpecimen, .id=collection, .name="Second"}));
+    // Text in the returned result survives finalization and later statements.
+    CHECK(created->specimens.front().display_name == "First");
+    CHECK(created->specimens.front().botanical_name == "Botanical");
+    CHECK(created->specimens.front().cultivar == "Cultivar");
+    CHECK(created->specimens.front().profile == mv::PlantProfile::Herb);
+    CHECK(created->specimens.front().acquired_on == "2024-02-29");
+    CHECK_FALSE(created->specimens.front().archived_at);
+
+    REQUIRE(invoke({.kind=K::UpdateSpecimen, .id=id, .name="Renamed"}));
+    auto state = invoke({.kind=K::GetSpecimen, .id=id});
+    REQUIRE(state);
+    REQUIRE(state->specimens.size() == 1);
+    CHECK(state->specimens.front().profile == mv::PlantProfile::Herb);
+    CHECK(state->specimens.front().acquired_on == "2024-02-29");
+    REQUIRE(invoke({.kind=K::UpdateSpecimen, .id=id, .name="Renamed", .replace_optional_metadata=true}));
+    state = invoke({.kind=K::ArchiveSpecimen, .id=id});
+    REQUIRE(state);
+    state = invoke({.kind=K::GetSpecimen, .id=id});
+    REQUIRE(state);
+    CHECK(state->specimens.front().archived);
+    CHECK(state->specimens.front().archived_at.has_value());
+    CHECK_FALSE(state->specimens.front().profile);
+    CHECK_FALSE(state->specimens.front().acquired_on);
+
+    REQUIRE(execute_on_worker("CREATE TRIGGER reject_plant BEFORE UPDATE ON specimen BEGIN SELECT RAISE(ABORT,'plant rejected'); END") == SQLITE_OK);
+    const auto failed = invoke({.kind=K::RestoreSpecimen, .id=id});
+    REQUIRE_FALSE(failed);
+    CHECK(failed.error().code == mv::MainverteError::Code::Database);
+    CHECK(failed.error().message.find("plant rejected") != std::string::npos);
+    REQUIRE(execute_on_worker("DROP TRIGGER reject_plant") == SQLITE_OK);
+    REQUIRE(invoke({.kind=K::RestoreSpecimen, .id=id}));
+    state = invoke({.kind=K::GetSpecimen, .id=id});
+    REQUIRE(state);
+    CHECK_FALSE(state->specimens.front().archived);
+    CHECK_FALSE(state->specimens.front().archived_at);
 }

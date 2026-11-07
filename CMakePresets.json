@@ -1,0 +1,17 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "workflow-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+        "BUILD_QT_APP": true,
+        "CMAKE_C_FLAGS_RELEASE": "-O3 -DNDEBUG -g",
+        "CMAKE_CXX_FLAGS_RELEASE": "-O3 -DNDEBUG -g"
+      }
+    }
+  ]
+}

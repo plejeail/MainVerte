@@ -18,7 +18,7 @@
 
 #include "app_settings.h"
 #include "mv_core.h"
-#include "mvlog/mvlog.h"
+#include "mvlog.h"
 #include "translator.h"
 
 
@@ -78,9 +78,9 @@ TEST_CASE("language completion restores the interface and preserves automatic pr
     const int previous_index = ts::language_index();
     const int requested_index = (previous_index + 1) % static_cast<int>(ts::Lang_Count);
     const std::string requested_language(ts::list_languages()[requested_index]);
-    AppSettings settings;
+    App_Settings settings;
     QQmlEngine engine;
-    QObject::connect(&settings, &AppSettings::languageChanged, &engine, &QQmlEngine::retranslate);
+    QObject::connect(&settings, &App_Settings::language_changed, &engine, &QQmlEngine::retranslate);
     QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
     REQUIRE(source.open(QIODevice::ReadOnly));
     QQmlComponent component(&engine);
@@ -101,17 +101,17 @@ TEST_CASE("language completion restores the interface and preserves automatic pr
     CHECK(selector->property("currentIndex").toInt() == previous_index);
     const auto previous_title = page->property("title").toString();
     int language_changes = 0;
-    QObject::connect(&settings, &AppSettings::languageChanged, &settings, [&] {
+    QObject::connect(&settings, &App_Settings::language_changed, &settings, [&] {
         ++language_changes;
         if (language_changes == 2) {
             // Rollback notification must not admit a new write before it finishes.
-            settings.selectLanguage(requested_index);
+            settings.select_language(requested_index);
         }
     });
 
     REQUIRE(QMetaObject::invokeMethod(selector, "activated", Q_ARG(int, requested_index)));
     CHECK(settings.saving());
-    CHECK_FALSE(settings.saveFailed());
+    CHECK_FALSE(settings.save_failed());
     CHECK(ts::current_language() == requested_language);
     CHECK(selector->property("currentIndex").toInt() == requested_index);
     CHECK(page->property("title").toString() == ts::get(ts::TextId::Parameters_Title));
@@ -120,14 +120,14 @@ TEST_CASE("language completion restores the interface and preserves automatic pr
     CHECK(persisted.language == previous_preference);
     REQUIRE(pending.size() == 1);
     CHECK(pending.front().settings.language == requested_language);
-    settings.selectLanguage(previous_index);
-    settings.selectLanguage((requested_index + 1) % static_cast<int>(ts::Lang_Count));
+    settings.select_language(previous_index);
+    settings.select_language((requested_index + 1) % static_cast<int>(ts::Lang_Count));
     REQUIRE(pending.size() == 1);
     CHECK(ts::current_language() == requested_language);
     complete_save(success);
 
     CHECK_FALSE(settings.saving());
-    CHECK(settings.saveFailed() == !success);
+    CHECK(settings.save_failed() == !success);
     CHECK(selector->property("enabled").toBool());
     CHECK(pending.empty());
     CHECK(language_changes == (success ? 1 : 2));
@@ -150,14 +150,14 @@ TEST_CASE("language completion restores the interface and preserves automatic pr
 
     // A later accepted change clears the error and settles in submission order.
     accept_submission = true;
-    settings.selectLanguage(previous_index);
+    settings.select_language(previous_index);
     CHECK(settings.saving());
-    CHECK_FALSE(settings.saveFailed());
-    settings.selectLanguage(requested_index);
+    CHECK_FALSE(settings.save_failed());
+    settings.select_language(requested_index);
     REQUIRE(pending.size() == 1);
     complete_save(true);
     CHECK_FALSE(settings.saving());
-    CHECK_FALSE(settings.saveFailed());
+    CHECK_FALSE(settings.save_failed());
     CHECK(persisted.language == previous_effective);
     CHECK(ts::current_language() == previous_effective);
     CHECK(selector->property("currentIndex").toInt() == previous_index);
@@ -172,8 +172,8 @@ TEST_CASE("log level completion restores the threshold and QML selector on failu
     SUBCASE("success") { success = true; }
     SUBCASE("database failure") {}
     SUBCASE("submission refusal") { accept_submission = false; }
-    AppSettings settings;
-    CHECK(settings.logLevel() == 2);
+    App_Settings settings;
+    CHECK(settings.log_level() == 2);
     CHECK(mvlog::level() == mvlog::Level::Warning);
     QQmlEngine engine;
     QFile source(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath("../qml/SettingsPage.qml"));
@@ -195,32 +195,32 @@ TEST_CASE("log level completion restores the threshold and QML selector on failu
     REQUIRE(selector);
     CHECK(selector->property("currentIndex").toInt() == 2);
     for (const int invalid : {-1, 4, 256}) {
-        settings.selectLogLevel(invalid);
+        settings.select_log_level(invalid);
         CHECK_FALSE(settings.saving());
         CHECK(pending.empty());
-        CHECK(settings.logLevel() == 2);
+        CHECK(settings.log_level() == 2);
         CHECK(mvlog::level() == mvlog::Level::Warning);
     }
 
     int changes = 0;
-    QObject::connect(&settings, &AppSettings::logLevelChanged, &settings, [&] {
+    QObject::connect(&settings, &App_Settings::log_level_changed, &settings, [&] {
         ++changes;
         if (changes == 2) {
-            settings.selectLogLevel(1); // Ignore reentrant changes during rollback.
+            settings.select_log_level(1); // Ignore reentrant changes during rollback.
         }
     });
     REQUIRE(QMetaObject::invokeMethod(selector, "activated", Q_ARG(int, 3)));
     CHECK(settings.saving());
-    CHECK(settings.logLevel() == 3);
+    CHECK(settings.log_level() == 3);
     CHECK(selector->property("currentIndex").toInt() == 3);
     CHECK(mvlog::level() == mvlog::Level::Error);
-    settings.selectLogLevel(0);
+    settings.select_log_level(0);
     REQUIRE(pending.size() == 1);
     CHECK(persisted.log_level == mv::LogLevel::Wrn);
     complete_save(success);
     CHECK_FALSE(settings.saving());
-    CHECK(settings.saveFailed() == !success);
-    CHECK(settings.logLevel() == (success ? 3 : 2));
+    CHECK(settings.save_failed() == !success);
+    CHECK(settings.log_level() == (success ? 3 : 2));
     CHECK(selector->property("currentIndex").toInt() == (success ? 3 : 2));
     CHECK(mvlog::level() == (success ? mvlog::Level::Error : mvlog::Level::Warning));
     CHECK(persisted.log_level == (success ? mv::LogLevel::Err : mv::LogLevel::Wrn));
@@ -232,9 +232,9 @@ TEST_CASE("log level failure restores the effective threshold even if the settin
     persisted = {};
     pending.clear();
     accept_submission = true;
-    auto settings = std::make_unique<AppSettings>();
+    auto settings = std::make_unique<App_Settings>();
     mvlog::set_level(mvlog::Level::Info);
-    settings->selectLogLevel(3);
+    settings->select_log_level(3);
     CHECK(mvlog::level() == mvlog::Level::Error);
     settings.reset();
     complete_save(false);
