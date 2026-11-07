@@ -1,11 +1,11 @@
 // clazy:skip
-#include <doctest/doctest.h>
-
+#include <atomic>
 #include <cstdlib>
 #include <string>
 #include <thread>
 #include <vector>
-#include <atomic>
+
+#include <doctest/doctest.h>
 
 #include "../src/mvlog/mvlog.inl.h"
 
@@ -28,26 +28,48 @@ void set_zone(const char* zone) {
 #endif
 }
 
+void set_eastern_zone() {
+#ifdef _WIN32
+    // UCRT's TZ path leaves _dstbias unchanged, including zero inherited from
+    // restoring a system zone without DST. Supply the fixture's one-hour bias.
+    _dstbias = -3600;
+    set_zone("EST5EDT");
+#else
+    // Without explicit rules, POSIX leaves the transition dates to the runtime.
+    set_zone("EST5EDT,M3.2.0/2,M11.1.0/2");
+#endif
+}
+
 struct RestoreZone {
     const char* original{std::getenv("TZ")};
     bool had_zone{original != nullptr};
     std::string saved{had_zone ? original : ""};
+#ifdef _WIN32
+    long saved_dst_bias{};
+    RestoreZone() {
+        ::_tzset();
+        REQUIRE(::_get_dstbias(&saved_dst_bias) == 0);
+    }
+#endif
+
     ~RestoreZone() {
 #ifdef _WIN32
         (void)::_putenv_s("TZ", saved.c_str());
         ::_tzset();
+        _dstbias = saved_dst_bias;
 #else
         if (had_zone) {
             (void)::setenv("TZ", saved.c_str(), 1);
         } else {
             (void)::unsetenv("TZ");
         }
+
         ::tzset();
 #endif
     }
 };
 
-}  // namespace
+}  //  namespace
 
 TEST_CASE("UTC conversion handles late hours, leap days and century boundaries") {
     std::tm date{};
@@ -107,9 +129,11 @@ TEST_CASE("Local conversion handles year rollover and concurrent callers") {
             }
         });
     }
+
     for (auto& worker : workers) {
         worker.join();
     }
+
     CHECK(valid.load());
 }
 
@@ -126,13 +150,86 @@ TEST_CASE("Two digit formatting writes all values without touching surrounding b
 
 TEST_CASE("Daily offset calculation includes daylight saving without a manual correction") {
     RestoreZone restore;
-    set_zone("EST5EDT");
+#ifdef _WIN32
+    // Reproduce the state left by _tzset() on the UTC Windows CI runner.
+    _dstbias = 0;
+#endif
+    set_eastern_zone();
     mvlog::detail::LocalOffsetCache cache;
     std::time_t offset{};
     REQUIRE(cache.get(timestamp(2026, 1, 15, 12), offset));
     CHECK(offset == -5 * 3600);
     REQUIRE(cache.get(timestamp(2026, 7, 15, 12), offset));
     CHECK(offset == -4 * 3600);
+}
+
+TEST_CASE("Runtime local conversion and fresh offsets follow both daylight saving transitions") {
+    RestoreZone restore;
+    set_eastern_zone();
+    const struct Sample {
+        std::time_t utc;
+        int hour;
+        int minute;
+        int second;
+        int is_dst;
+        std::time_t offset;
+    } samples[]{
+        {timestamp(2026, 3, 8, 6, 59, 59), 1, 59, 59, 0, -5 * 3600},
+        {timestamp(2026, 3, 8, 7), 3, 0, 0, 1, -4 * 3600},
+        {timestamp(2026, 11, 1, 5, 59, 59), 1, 59, 59, 1, -4 * 3600},
+        {timestamp(2026, 11, 1, 6), 1, 0, 0, 0, -5 * 3600},
+    };
+    for (const auto& sample : samples) {
+        CAPTURE(sample.utc);
+        std::tm local{};
+        REQUIRE(mvlog::detail::system_local_time(local, sample.utc));
+        CHECK(local.tm_hour == sample.hour);
+        CHECK(local.tm_min == sample.minute);
+        CHECK(local.tm_sec == sample.second);
+        CHECK(local.tm_isdst >= 0);
+        CHECK((local.tm_isdst > 0) == (sample.is_dst > 0));
+        // Each fresh cache samples the runtime at the requested instant.
+        mvlog::detail::LocalOffsetCache cache;
+        std::time_t offset{};
+        REQUIRE(cache.get(sample.utc, offset));
+        CHECK(offset == sample.offset);
+    }
+}
+
+TEST_CASE("Daily cache defers daylight saving transitions until the next UTC day") {
+    RestoreZone restore;
+    set_eastern_zone();
+    mvlog::detail::LocalOffsetCache cache;
+    std::time_t offset{};
+    REQUIRE(cache.get(timestamp(2026, 3, 8, 6, 59, 59), offset));
+    CHECK(offset == -5 * 3600);
+    REQUIRE(cache.get(timestamp(2026, 3, 8, 7), offset));
+    CHECK(offset == -5 * 3600);
+    REQUIRE(cache.get(timestamp(2026, 3, 9), offset));
+    CHECK(offset == -4 * 3600);
+    REQUIRE(cache.get(timestamp(2026, 11, 1, 5, 59, 59), offset));
+    CHECK(offset == -4 * 3600);
+    REQUIRE(cache.get(timestamp(2026, 11, 1, 6), offset));
+    CHECK(offset == -4 * 3600);
+    REQUIRE(cache.get(timestamp(2026, 11, 2), offset));
+    CHECK(offset == -5 * 3600);
+}
+
+TEST_CASE("Zones without daylight saving keep the same winter and summer offsets") {
+    RestoreZone restore;
+    for (const char* zone : {"UTC0", "EST5"}) {
+        CAPTURE(zone);
+        set_zone(zone);
+        mvlog::detail::LocalOffsetCache cache;
+        for (const unsigned month : {1u, 7u}) {
+            std::tm local{};
+            REQUIRE(mvlog::detail::system_local_time(local, timestamp(2026, month, 15, 12)));
+            CHECK(local.tm_isdst == 0);
+            std::time_t offset{};
+            REQUIRE(cache.get(timestamp(2026, month, 15, 12), offset));
+            CHECK(offset == (std::string{zone} == "UTC0" ? 0 : -5 * 3600));
+        }
+    }
 }
 
 TEST_CASE("Failed conversion leaves the output date unchanged") {
