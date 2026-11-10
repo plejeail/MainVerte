@@ -41,29 +41,13 @@ struct sqlite3_stmt;
 
 class Query {
 public:
-    using query_variant_t = std::variant<std::monostate, int32_t, int64_t, double, std::string_view>;
-
     Query() = default;
     Query(const Query&) = delete;
     Query& operator=(const Query&) = delete;
     ~Query();
 
-    // A Query owns one prepared statement for one SQL text on one connection.
-    //
-    // prepare() on a Query that holds nothing prepares the statement. On a Query that already
-    // holds a statement it reuses it only for the same connection and the same SQL text: the
-    // statement is reset and its bindings cleared, so no state of the previous execution
-    // survives. Any other combination returns false and leaves the held statement untouched;
-    // a different statement needs a different Query (or finalize() first). Nothing is ever
-    // executed from a statement the caller did not ask for.
-    //
-    // The result code of the reset is deliberately not reported: sqlite3_reset() repeats the
-    // error of the previous step(), which that step() already returned to its caller.
-    //
-    // A persistent Query must be finalize()d before its connection is closed; its owner does so.
-    // reset() releases the read lock of a statement left on a row. Both are idempotent.
     bool prepare(sqlite3* handle, const char* sql);
-    void reset();
+    bool reset();
     void finalize();
 
     bool bind(int32_t pos, std::string_view value);
@@ -74,10 +58,6 @@ public:
 
     int step();
 
-    // Typed access to the current row. std::nullopt means SQL NULL or a value that T cannot
-    // represent exactly: there is no implicit SQLite conversion (REAL truncated to an integer,
-    // TEXT read as 0) and no narrowing into an enum's underlying type. For a scoped enum only
-    // representability is checked; callers validate the enumerators they accept.
     template <typename T>
     [[nodiscard]] std::optional<T> column(int index) const;
     template <typename T> requires std::is_scoped_enum_v<T>
@@ -86,7 +66,6 @@ public:
 private:
     sqlite3_stmt* _statement = nullptr;
     sqlite3*      _handle = nullptr;
-    std::string   _sql;
 };
 
 template <> std::optional<int64_t> Query::column<int64_t>(int index) const;
