@@ -117,6 +117,7 @@ bool complete_setup(std::string name, std::string language, MoveOnlyFunction<voi
 // All outcomes (including queue rejection) are dispatched through platform callbacks.
 // The return value reports queue acceptance only. Discarding delivery does not cancel writes.
 // IDs are scoped to the current gardener captured at submission and specimen_id.
+// A specimen not owned by that gardener is refused with NotFound, for every action.
 // List/Add/Delete return the committed specimen list; Get returns one need.
 // Duplicate types are allowed. No events or scheduling state are created.
 bool manage_care(CareAction action, MoveOnlyFunction<void(CareResult)> callback);
