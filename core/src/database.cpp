@@ -143,20 +143,6 @@ MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_v
     return true;
 }
 
-bool prepare_statement(sqlite3* handle, Database::statement_ptr& ptr, const char* query) {
-    assert(handle != nullptr);
-    assert(query != nullptr);
-
-    if (ptr != nullptr) {
-        return true;
-    }
-
-    sqlite3_stmt* statement;
-    int rc = sqlite3_prepare_v2(handle, query, -1, &statement, nullptr);
-    ptr.reset(statement);
-    return rc == SQLITE_OK;
-}
-
 bool valid_name(const std::string& name) {
     return name.find('\0') == std::string::npos && name.find_first_not_of(" \t\r\n") != std::string::npos;
 }
@@ -193,12 +179,9 @@ bool Query::prepare(sqlite3* handle, const char* sql) {
     assert(handle != nullptr);
     assert(sql != nullptr);
 
-    if (_statement != nullptr) {
-        return true;
-    }
-
-    int rc = sqlite3_prepare_v2(handle, sql, -1, &_statement, nullptr);
-    return rc == SQLITE_OK;
+    sqlite3_finalize(_statement);  // Replaces any previous statement; finalizing nullptr is a no-op.
+    _statement = nullptr;
+    return sqlite3_prepare_v2(handle, sql, -1, &_statement, nullptr) == SQLITE_OK;
 }
 
 bool Query::bind(int32_t pos, std::string_view value) {
@@ -224,14 +207,6 @@ bool Query::bind_null(int32_t pos) {
 
 int Query::step() {
     return sqlite3_step(_statement);
-}
-
-bool Query::reset() {
-    return sqlite3_reset(_statement) == SQLITE_OK;
-}
-
-bool Query::done() const {
-    return sqlite3_step(_statement) == SQLITE_DONE;
 }
 
 template <>
@@ -473,18 +448,9 @@ void Database::thread_loop() {
 }
 
 int64_t Database::create_gardener(const std::string& name) {
+    Query insert;
     static constexpr const char* sql = "INSERT INTO gardener(display_name, created_at) VALUES (?1, unixepoch())";
-
-    if (!_statement_create_gardener.prepare(_handle, sql)) {
-        return -1;
-    }
-
-    if (!_statement_create_gardener.bind(1, name)) {
-        return -1;
-    }
-
-    auto step_ok = _statement_create_gardener.step() == SQLITE_DONE;
-    if (!_statement_create_gardener.reset() || !step_ok) {
+    if (!insert.prepare(_handle, sql) || !insert.bind(1, name) || insert.step() != SQLITE_DONE) {
         return -1;
     }
 
@@ -526,12 +492,11 @@ mv::GardenerResult Database::complete_setup(const std::string& name, const std::
     settings->current_collection_id = 0;
     settings->language = language;
     if (!initial_collection_name.empty()) {
-        statement_ptr collection(nullptr, sqlite3_finalize);
-        if (!prepare_statement(_handle, collection,
-                "INSERT INTO collection(gardener_id,name,created_at,modified_at) VALUES(?1,?2,unixepoch(),unixepoch())") ||
-            sqlite3_bind_int64(collection.get(), 1, id) != SQLITE_OK ||
-            sqlite3_bind_text(collection.get(), 2, initial_collection_name.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
-            sqlite3_step(collection.get()) != SQLITE_DONE) {
+        Query collection;
+        static constexpr const char* sql =
+            "INSERT INTO collection(gardener_id,name,created_at,modified_at) VALUES(?1,?2,unixepoch(),unixepoch())";
+        if (!collection.prepare(_handle, sql) || !collection.bind(1, id)
+            || !collection.bind(2, std::string_view(initial_collection_name)) || collection.step() != SQLITE_DONE) {
             return fail("initial collection");
         }
 
@@ -614,75 +579,62 @@ std::optional<mv::Settings> Database::read_settings() {
 }
 
 bool Database::write_settings(const mv::Settings& settings) {
+    std::string error;
     if (settings.current_gardener_id > 0 && settings.current_collection_id > 0) {
-        statement_ptr owner(nullptr, sqlite3_finalize);
-        if (!prepare_statement(_handle, owner, "SELECT 1 FROM collection WHERE id=?1 AND gardener_id=?2") ||
-            sqlite3_bind_int64(owner.get(), 1, settings.current_collection_id) != SQLITE_OK ||
-            sqlite3_bind_int64(owner.get(), 2, settings.current_gardener_id) != SQLITE_OK ||
-            sqlite3_step(owner.get()) != SQLITE_ROW) {
+        int owned = SQLITE_ERROR;
+        {
+            Query owner;
+            static constexpr const char* sql = "SELECT 1 FROM collection WHERE id=?1 AND gardener_id=?2";
+            if (owner.prepare(_handle, sql) && owner.bind(1, settings.current_collection_id)
+                && owner.bind(2, settings.current_gardener_id)) {
+                owned = owner.step();
+            }
+
+            if (owned != SQLITE_ROW && owned != SQLITE_DONE) {
+                error = sqlite3_errmsg(_handle);
+            }
+        }
+
+        if (!error.empty()) {
+            log_err("DB: cannot verify collection selection: {}", error);
+            return false;
+        }
+
+        if (owned == SQLITE_DONE) {
             log_wrn("DB: collection selection does not belong to gardener");
             return false;
         }
     }
 
-    static constexpr const char* sql = "UPDATE settings"
-                                       " SET current_gardener_id = ?1,"
-                                           "current_collection_id = ?2,"
-                                           "language = ?3,"
-                                           "dark_theme = ?4,"
-                                           "log_level = ?5,"
-                                           "debug_enabled = ?6"
-                                       " WHERE id = 1";
-    auto fail = [this] {
-        log_err("DB: cannot write settings (missing row or SQLite error): {}", sqlite3_errmsg(_handle));
-        _statement_write_settings.reset();
+    {
+        Query update;
+        static constexpr const char* sql = "UPDATE settings"
+                                           " SET current_gardener_id = ?1,"
+                                               "current_collection_id = ?2,"
+                                               "language = ?3,"
+                                               "dark_theme = ?4,"
+                                               "log_level = ?5,"
+                                               "debug_enabled = ?6"
+                                           " WHERE id = 1";
+        const bool bound = update.prepare(_handle, sql)
+            && (settings.current_gardener_id == mv::Settings::Undefined
+                    ? update.bind_null(1) : update.bind(1, settings.current_gardener_id))
+            && (settings.current_collection_id == mv::Settings::Undefined
+                    ? update.bind_null(2) : update.bind(2, settings.current_collection_id))
+            && update.bind(3, settings.language)
+            && update.bind(4, settings.dark_theme_enabled)
+            && update.bind(5, static_cast<int64_t>(settings.log_level))
+            && update.bind(6, settings.debug_enabled);
+        if (!bound || update.step() != SQLITE_DONE) {
+            error = sqlite3_errmsg(_handle);
+        } else if (sqlite3_changes(_handle) != 1) {
+            error = "settings row is missing";
+        }
+    }
+
+    if (!error.empty()) {
+        log_err("DB: cannot write settings: {}", error);
         return false;
-    };
-
-
-    if (!_statement_write_settings.prepare(_handle, sql)) {
-        return fail();
-    }
-
-    auto& statement = _statement_write_settings;
-    std::array fields{settings.current_gardener_id, settings.current_collection_id};
-    for (int column = 0; column < 2; ++column) {
-        bool success = false;
-
-        auto id = fields[column];
-        if (id == 0) {
-            success = _statement_write_settings.bind_null(column + 1);
-        } else {
-            success = _statement_write_settings.bind(column + 1, fields[column]);
-        }
-
-        if (!success) {
-            return fail();
-        }
-    }
-
-    if (!_statement_write_settings.bind(3, settings.language)) {
-        return fail();
-    }
-
-    if (!_statement_write_settings.bind(4, settings.dark_theme_enabled)) {
-        return fail();
-    }
-
-    if (!_statement_write_settings.bind(5, static_cast<int64_t>(settings.log_level))) {
-        return fail();
-    }
-
-    if (!_statement_write_settings.bind(6, settings.debug_enabled)) {
-        return fail();
-    }
-
-    if (!statement.done() || sqlite3_changes(_handle) != 1) {
-        return fail();
-    }
-
-    if (!statement.reset()) {
-        return fail();
     }
 
     return true;

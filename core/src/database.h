@@ -23,7 +23,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
-#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -44,8 +43,14 @@ class Query {
 public:
     using query_variant_t = std::variant<std::monostate, int32_t, int64_t, double, std::string_view>;
 
+    Query() = default;
+    Query(const Query&) = delete;
+    Query& operator=(const Query&) = delete;
     ~Query();
 
+    // Statements are single-use locals: finalized on destruction, so a refused or failed
+    // operation cannot leave bindings or a half-stepped statement behind. Preparing again
+    // replaces the previous statement.
     bool prepare(sqlite3* handle, const char* sql);
 
     bool bind(int32_t pos, std::string_view value);
@@ -55,9 +60,6 @@ public:
     bool bind_null(int32_t pos);
 
     int step();
-    bool reset();
-
-    [[nodiscard]] bool done() const;
 
     // Typed access to the current row. std::nullopt means SQL NULL or a value that T cannot
     // represent exactly: there is no implicit SQLite conversion (REAL truncated to an integer,
@@ -78,8 +80,6 @@ template <> std::optional<std::string_view> Query::column<std::string_view>(int 
 
 class Database {
 public:
-    using statement_ptr = std::unique_ptr<sqlite3_stmt, int(*)(sqlite3_stmt*)>;
-
     using Job = mv::MoveOnlyFunction<void(sqlite3*)>;
 
     enum class State : int8_t { Uninitialized, Initialized, Running, Stopping, };
@@ -116,8 +116,6 @@ private:
     sqlite3*        _handle = nullptr;
     std::deque<Job> _jobs;
     std::thread     _thread;
-    Query           _statement_create_gardener;
-    Query           _statement_write_settings;
 };
 
 namespace detail {

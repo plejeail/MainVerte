@@ -443,3 +443,62 @@ TEST_CASE("Stored selection that does not resolve to an existing row reads as no
     CHECK(missing_both->current_gardener_id == 0);
     CHECK(missing_both->current_collection_id == 0);
 }
+
+TEST_CASE("Settings and gardener operations stay usable after refused or failed attempts") {
+    Database database;
+    REQUIRE(database.initialize(":memory:"));
+    database.start();
+    const auto execute = [&database](const char* sql) {
+        return run_job(database, [sql](sqlite3* handle) {
+            return sqlite3_exec(handle, sql, nullptr, nullptr, nullptr);
+        });
+    };
+    const auto write = [&database](const mv::Settings& settings) {
+        return run_job(database, [&database, settings](sqlite3*) { return database.write_settings(settings); });
+    };
+    const auto read = [&database] {
+        return run_job(database, [&database](sqlite3*) { return database.read_settings(); });
+    };
+    REQUIRE(execute("INSERT INTO gardener VALUES(1,'Ada',1),(2,'Bob',1);"
+                    "INSERT INTO collection VALUES(20,2,'Bob plants',1,1);") == SQLITE_OK);
+
+    mv::Settings settings;
+    settings.language = "fr";
+    settings.current_gardener_id = 1;
+
+    // SQLite refuses the update itself.
+    REQUIRE(execute("CREATE TRIGGER refuse_settings BEFORE UPDATE ON settings "
+                    "BEGIN SELECT RAISE(ABORT,'refused'); END;") == SQLITE_OK);
+    CHECK_FALSE(write(settings));
+    REQUIRE(execute("DROP TRIGGER refuse_settings;") == SQLITE_OK);
+
+    // Core refuses a collection owned by another gardener before updating anything.
+    auto foreign = settings;
+    foreign.language = "de";
+    foreign.current_collection_id = 20;
+    CHECK_FALSE(write(foreign));
+    auto untouched = read();
+    REQUIRE(untouched.has_value());
+    CHECK(untouched->language.empty());
+    CHECK(untouched->current_gardener_id == 0);
+
+    // The next valid write applies completely; nothing from the refused attempts leaks into it.
+    REQUIRE(write(settings));
+    auto stored = read();
+    REQUIRE(stored.has_value());
+    CHECK(stored->language == "fr");
+    CHECK(stored->current_gardener_id == 1);
+    CHECK(stored->current_collection_id == 0);
+
+    REQUIRE(execute("CREATE TRIGGER refuse_gardener BEFORE INSERT ON gardener "
+                    "BEGIN SELECT RAISE(ABORT,'refused'); END;") == SQLITE_OK);
+    CHECK(run_job(database, [&database](sqlite3*) { return database.create_gardener("Cleo"); }) == -1);
+    REQUIRE(execute("DROP TRIGGER refuse_gardener;") == SQLITE_OK);
+    const auto created = run_job(database, [&database](sqlite3*) { return database.create_gardener("Dan"); });
+    REQUIRE(created > 0);
+    const auto name = run_job(database, [created](sqlite3* handle) {
+        return scalar(handle, std::format("SELECT display_name FROM gardener WHERE id={};", created).c_str());
+    });
+    REQUIRE(name.first == SQLITE_OK);
+    CHECK(name.second == "Dan");
+}
