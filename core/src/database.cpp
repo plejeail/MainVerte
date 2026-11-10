@@ -8,6 +8,7 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -15,6 +16,7 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -234,7 +236,8 @@ bool Query::done() const {
 
 template <>
 std::optional<int64_t> Query::column<int64_t>(int index) const {
-    if (sqlite3_column_type(_statement, index) == SQLITE_NULL) {
+    // sqlite3_column_int64 converts any storage class: 1.5 reads as 1 and 'text' as 0.
+    if (sqlite3_column_type(_statement, index) != SQLITE_INTEGER) {
         return std::nullopt;
     }
 
@@ -243,14 +246,25 @@ std::optional<int64_t> Query::column<int64_t>(int index) const {
 
 template <typename T> requires std::is_scoped_enum_v<T>
 MV_INLINE std::optional<T> Query::column(int index) const {
-    return column<int64_t>(index).transform([](int64_t value) {
-        return static_cast<T>(value);
-    });
+    using Underlying = std::underlying_type_t<T>;
+
+    // static_cast would silently wrap an out-of-range value into the underlying type.
+    const auto value = column<int64_t>(index);
+    if (!value || *value < std::numeric_limits<Underlying>::min() || *value > std::numeric_limits<Underlying>::max()) {
+        return std::nullopt;
+    }
+
+    return static_cast<T>(*value);
 }
 
 template <>
-MV_INLINE std::optional<bool> Query::column<bool>(int index) const {
-    return column<int64_t>(index).transform([](int64_t x) { return x != 0; });
+std::optional<bool> Query::column<bool>(int index) const {
+    const auto value = column<int64_t>(index);
+    if (!value || (*value != 0 && *value != 1)) {
+        return std::nullopt;
+    }
+
+    return *value == 1;
 }
 
 template <>
@@ -536,60 +550,64 @@ mv::GardenerResult Database::complete_setup(const std::string& name, const std::
 }
 
 std::optional<mv::Settings> Database::read_settings() {
+    // Selections are resolved while reading: a stored gardener or collection that does not
+    // exist reads as "no selection". Ownership of the collection is enforced when writing and
+    // repaired by update_plants, and a collection may be selected without a gardener.
     static constexpr const char* sql =
-        "SELECT current_gardener_id, "
-               "current_collection_id,"
-               "language,"
-               "dark_theme,"
-               "log_level,"
-               "debug_enabled"
-        " FROM settings"
-        " WHERE id = 1";
-    auto fail = [this]() -> std::optional<mv::Settings> {
-        log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}",
-                sqlite3_errmsg(_handle));
-        _statement_read_settings.reset();
-        return std::nullopt;
-    };
+        "SELECT g.id,"
+               "c.id,"
+               "s.language,"
+               "s.dark_theme,"
+               "s.log_level,"
+               "s.debug_enabled"
+        " FROM settings s"
+        " LEFT JOIN gardener g ON g.id = s.current_gardener_id"
+        " LEFT JOIN collection c ON c.id = s.current_collection_id"
+        " WHERE s.id = 1";
 
-    if (!_statement_read_settings.prepare(_handle, sql)) {
-        return fail();
-    }
+    // The statement is local and finalized before returning. Error details are captured while
+    // it is alive: finalizing it can replace the connection's message.
+    std::string error;
+    std::optional<mv::Settings> settings;
+    {
+        Query select;
+        int rc = SQLITE_ERROR;
+        if (!select.prepare(_handle, sql) || (rc = select.step()) != SQLITE_ROW) {
+            error = rc == SQLITE_DONE ? "settings row is missing" : sqlite3_errmsg(_handle);
+        } else {
+            const auto language = select.column<std::string_view>(2);
+            const auto dark_theme = select.column<bool>(3);
+            const auto log_level = select.column<int64_t>(4);
+            const auto debug_enabled = select.column<bool>(5);
 
-    if (_statement_read_settings.step() != SQLITE_ROW) {
-        return fail();
-    }
+            if (!language || !dark_theme || !debug_enabled) {
+                error = "invalid stored language or presentation flag";
+            } else if (!log_level || *log_level < static_cast<int64_t>(mv::LogLevel::Dbg)
+                                  || *log_level > static_cast<int64_t>(mv::LogLevel::Err)) {
+                error = "invalid stored log level";
+            } else {
+                // Copy everything out of the current row before stepping again: once the
+                // statement reports SQLITE_DONE its columns no longer refer to a row.
+                mv::Settings decoded;
+                // Selections are nullable: NULL reads as Settings::Undefined.
+                decoded.current_gardener_id = select.column<int64_t>(0).value_or(mv::Settings::Undefined);
+                decoded.current_collection_id = select.column<int64_t>(1).value_or(mv::Settings::Undefined);
+                decoded.language = *language;
+                decoded.dark_theme_enabled = *dark_theme;
+                decoded.log_level = static_cast<mv::LogLevel>(*log_level);
+                decoded.debug_enabled = *debug_enabled;
 
-    mv::Settings settings;
-    std::array fields{&settings.current_gardener_id, &settings.current_collection_id};
-    for (int c = 0; c < 2; ++c) {
-        const auto value = _statement_read_settings.column<int64_t>(c);
-        if (value.has_value()) {
-            *fields[c] = static_cast<mv::id_t>(*value);
+                if (const int next = select.step(); next != SQLITE_DONE) {
+                    error = next == SQLITE_ROW ? "unexpected extra settings row" : sqlite3_errmsg(_handle);
+                } else {
+                    settings = std::move(decoded);
+                }
+            }
         }
     }
 
-    const auto language = _statement_read_settings.column<std::string_view>(2);
-    if (!language.has_value()) {
-        return fail();
-    }
-
-    settings.language = *language;
-
-    settings.dark_theme_enabled = _statement_read_settings.column<bool>(3).value_or(false);
-
-    const auto log_level = _statement_read_settings.column<mv::LogLevel>(4);
-    if (!log_level.has_value() || log_level < mv::LogLevel::Dbg || log_level > mv::LogLevel::Err) {
-        return fail();
-    }
-
-    settings.log_level = log_level.value();
-
-    settings.debug_enabled = _statement_read_settings.column<bool>(5).value_or(false);
-
-    const auto is_done = _statement_read_settings.done();
-    if (!_statement_read_settings.reset() || !is_done) {
-        return fail();
+    if (!settings) {
+        log_err("DB: cannot read settings: {}", error);
     }
 
     return settings;

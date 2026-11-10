@@ -59,6 +59,10 @@ public:
 
     [[nodiscard]] bool done() const;
 
+    // Typed access to the current row. std::nullopt means SQL NULL or a value that T cannot
+    // represent exactly: there is no implicit SQLite conversion (REAL truncated to an integer,
+    // TEXT read as 0) and no narrowing into an enum's underlying type. For a scoped enum only
+    // representability is checked; callers validate the enumerators they accept.
     template <typename T>
     [[nodiscard]] std::optional<T> column(int index) const;
     template <typename T> requires std::is_scoped_enum_v<T>
@@ -67,6 +71,10 @@ public:
 private:
     sqlite3_stmt* _statement = nullptr;
 };
+
+template <> std::optional<int64_t> Query::column<int64_t>(int index) const;
+template <> std::optional<bool> Query::column<bool>(int index) const;
+template <> std::optional<std::string_view> Query::column<std::string_view>(int index) const;
 
 class Database {
 public:
@@ -109,7 +117,6 @@ private:
     std::deque<Job> _jobs;
     std::thread     _thread;
     Query           _statement_create_gardener;
-    Query           _statement_read_settings;
     Query           _statement_write_settings;
 };
 
