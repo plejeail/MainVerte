@@ -176,19 +176,59 @@ bool valid_date(const std::optional<std::string>& value) {
                                    std::chrono::day{static_cast<unsigned>(day)}}.ok();
 }
 
+// Resets a persistent Query on every exit path, so a statement left on a row never keeps a read
+// lock (blocking WAL checkpoints and later writers) until its next use.
+class Reset_guard {
+public:
+    explicit Reset_guard(Query& query) : _query(query) {}
+    Reset_guard(const Reset_guard&) = delete;
+    Reset_guard& operator=(const Reset_guard&) = delete;
+    ~Reset_guard() { _query.reset(); }
+
+private:
+    Query& _query;
+};
+
 }  // namespace
 
 Query::~Query() {
-    sqlite3_finalize(_statement);  // already check for nullptr
+    finalize();
 }
 
 bool Query::prepare(sqlite3* handle, const char* sql) {
     assert(handle != nullptr);
     assert(sql != nullptr);
 
-    sqlite3_finalize(_statement);  // Replaces any previous statement; finalizing nullptr is a no-op.
+    if (_statement != nullptr) {
+        if (_handle != handle || _sql != sql) {
+            log_err("DB: Query reuse refused: different {}", _handle != handle ? "connection" : "SQL");
+            return false;
+        }
+
+        // Ignored on purpose: it only repeats the error of the previous step(), already reported.
+        sqlite3_reset(_statement);
+        return sqlite3_clear_bindings(_statement) == SQLITE_OK;
+    }
+
+    if (sqlite3_prepare_v2(handle, sql, -1, &_statement, nullptr) != SQLITE_OK) {
+        _statement = nullptr;
+        return false;
+    }
+
+    _handle = handle;
+    _sql = sql;
+    return true;
+}
+
+void Query::reset() {
+    sqlite3_reset(_statement);  // Same result-code reasoning as prepare(); nullptr is a no-op.
+}
+
+void Query::finalize() {
+    sqlite3_finalize(_statement);  // Result repeats the last step(); nullptr is a no-op.
     _statement = nullptr;
-    return sqlite3_prepare_v2(handle, sql, -1, &_statement, nullptr) == SQLITE_OK;
+    _handle = nullptr;
+    _sql.clear();
 }
 
 bool Query::bind(int32_t pos, std::string_view value) {
@@ -316,6 +356,10 @@ Database::~Database() {
         _thread.join();
     }
 
+    // Statements must not outlive their connection.
+    _read_settings_query.finalize();
+    _write_settings_query.finalize();
+    assert(_handle == nullptr || sqlite3_next_stmt(_handle, nullptr) == nullptr);
     sqlite3_close_v2(_handle);
 }
 
@@ -537,12 +581,13 @@ std::optional<mv::Settings> Database::read_settings() {
         " LEFT JOIN collection c ON c.id = s.current_collection_id"
         " WHERE s.id = 1";
 
-    // The statement is local and finalized before returning. Error details are captured while
-    // it is alive: finalizing it can replace the connection's message.
+    // The statement is persistent: reset by the guard on every exit, before the caller can run
+    // another job. Error details are captured before that reset can replace the message.
     std::string error;
     std::optional<mv::Settings> settings;
     {
-        Query select;
+        Query& select = _read_settings_query;
+        const Reset_guard guard(select);
         int rc = SQLITE_ERROR;
         if (!select.prepare(_handle, sql) || (rc = select.step()) != SQLITE_ROW) {
             error = rc == SQLITE_DONE ? "settings row is missing" : sqlite3_errmsg(_handle);
@@ -614,7 +659,8 @@ bool Database::write_settings(const mv::Settings& settings) {
     }
 
     {
-        Query update;
+        Query& update = _write_settings_query;
+        const Reset_guard guard(update);
         static constexpr const char* sql = "UPDATE settings"
                                            " SET current_gardener_id = ?1,"
                                                "current_collection_id = ?2,"

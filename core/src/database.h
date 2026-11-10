@@ -48,10 +48,23 @@ public:
     Query& operator=(const Query&) = delete;
     ~Query();
 
-    // Statements are single-use locals: finalized on destruction, so a refused or failed
-    // operation cannot leave bindings or a half-stepped statement behind. Preparing again
-    // replaces the previous statement.
+    // A Query owns one prepared statement for one SQL text on one connection.
+    //
+    // prepare() on a Query that holds nothing prepares the statement. On a Query that already
+    // holds a statement it reuses it only for the same connection and the same SQL text: the
+    // statement is reset and its bindings cleared, so no state of the previous execution
+    // survives. Any other combination returns false and leaves the held statement untouched;
+    // a different statement needs a different Query (or finalize() first). Nothing is ever
+    // executed from a statement the caller did not ask for.
+    //
+    // The result code of the reset is deliberately not reported: sqlite3_reset() repeats the
+    // error of the previous step(), which that step() already returned to its caller.
+    //
+    // A persistent Query must be finalize()d before its connection is closed; its owner does so.
+    // reset() releases the read lock of a statement left on a row. Both are idempotent.
     bool prepare(sqlite3* handle, const char* sql);
+    void reset();
+    void finalize();
 
     bool bind(int32_t pos, std::string_view value);
     bool bind(int32_t pos, double value);
@@ -72,6 +85,8 @@ public:
 
 private:
     sqlite3_stmt* _statement = nullptr;
+    sqlite3*      _handle = nullptr;
+    std::string   _sql;
 };
 
 template <> std::optional<int64_t> Query::column<int64_t>(int index) const;
@@ -109,6 +124,11 @@ private:
     void thread_loop();
 
     template <size_t software_version> bool migrate_database(size_t current_version);
+
+    // Persistent statements for operations repeated on the worker. Prepared on first use on the
+    // connection in _handle and finalized by ~Database before that connection is closed.
+    Query           _read_settings_query;
+    Query           _write_settings_query;
 
     State           _state = State::Uninitialized;
     std::mutex      _mutex;
