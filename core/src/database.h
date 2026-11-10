@@ -95,7 +95,7 @@ public:
     std::optional<mv::Settings> read_settings();
     bool write_settings(const mv::Settings& settings);
 
-    mv::CareResult update_care(const mv::CareAction& action);
+    mv::CareResult update_care(mv::id_t gardener, const mv::CareAction& action);
     mv::PlantsResult update_plants(mv::id_t gardener, const mv::PlantAction& a, const std::string& initial);
 private:
     void thread_loop();
@@ -111,9 +111,6 @@ private:
     Query           _statement_create_gardener;
     Query           _statement_read_settings;
     Query           _statement_write_settings;
-    Query           _statement_care_select;
-    Query           _statement_care_insert;
-    Query           _statement_care_remove;
 };
 
 namespace detail {

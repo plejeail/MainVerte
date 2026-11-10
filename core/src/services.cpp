@@ -199,8 +199,9 @@ bool mv::create_gardener(std::string name, MoveOnlyFunction<void(GardenerResult)
 bool mv::manage_care(CareAction action, MoveOnlyFunction<void(CareResult)> callback) {
     assert(callback);
     auto done = std::make_shared<MoveOnlyFunction<void(CareResult)>>(std::move(callback));
-    const bool accepted = service::database().submit([action, done](sqlite3* db) {
-        auto result = service::database().update_care(action);
+    const auto gardener = settings().current_gardener_id;
+    const bool accepted = service::database().submit([action, gardener, done](sqlite3* db) {
+        auto result = service::database().update_care(gardener, action);
         platform::dispatch_callback([done, result = std::move(result)]() mutable { (*done)(std::move(result)); });
     });
 

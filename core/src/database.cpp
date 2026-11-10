@@ -213,7 +213,7 @@ bool Query::bind(int32_t pos, int64_t value) {
 }
 
 MV_INLINE bool Query::bind(int32_t pos, bool value) {
-    return bind(pos, value ? 1LL : 0LL);
+    return bind(pos, static_cast<int64_t>(value ? 1 : 0));
 }
 
 bool Query::bind_null(int32_t pos) {
@@ -670,7 +670,7 @@ bool Database::write_settings(const mv::Settings& settings) {
     return true;
 }
 
-mv::CareResult Database::update_care(const mv::CareAction& action) {
+mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& action) {
     using K = mv::CareAction::Kind;
     const auto fail = [this](std::string message, mv::MainverteError::Code code = mv::MainverteError::Code::Database) -> mv::CareResult {
         if (!sqlite3_get_autocommit(_handle) && sqlite3_exec(_handle, "ROLLBACK", nullptr, nullptr, nullptr) != SQLITE_OK) {
@@ -693,60 +693,101 @@ mv::CareResult Database::update_care(const mv::CareAction& action) {
         return fail(sqlite3_errmsg(_handle));
     }
 
+    // Every statement is a local Query, finalized before the transaction ends. A refused
+    // or failed operation therefore leaves no binding or step state for later operations.
+    // Error details are captured inside each block, while the failing statement is still
+    // alive: finalizing it or rolling back can replace the connection's message.
+    std::string error;
+    int owned = SQLITE_ERROR;
+    {
+        Query owner;
+        static constexpr const char* sql = "SELECT 1 FROM specimen s"
+                                           " JOIN collection c ON c.id=s.collection_id"
+                                           " WHERE s.id=?1 AND c.gardener_id=?2";
+        if (!owner.prepare(_handle, sql) || !owner.bind(1, action.specimen_id) || !owner.bind(2, gardener)) {
+            error = sqlite3_errmsg(_handle);
+        } else {
+            owned = owner.step();
+            if (owned != SQLITE_ROW && owned != SQLITE_DONE) {
+                error = sqlite3_errmsg(_handle);
+            }
+        }
+    }
+
+    if (!error.empty()) {
+        return fail(std::move(error));
+    }
+
+    if (owned == SQLITE_DONE) {
+        return fail("Specimen unavailable", mv::MainverteError::Code::NotFound);
+    }
+
     if (action.kind == K::Add) {
-        static constexpr const char* sql = "INSERT INTO care_need(specimen_id,type) VALUES(?,?)";
-        if (!_statement_care_insert.prepare(_handle, sql)) {
-            return fail(sqlite3_errmsg(_handle));
+        {
+            Query insert;
+            static constexpr const char* sql = "INSERT INTO care_need(specimen_id,type) VALUES(?,?)";
+            if (!insert.prepare(_handle, sql) || !insert.bind(1, action.specimen_id)
+                || !insert.bind(2, static_cast<int64_t>(action.type))) {
+                error = sqlite3_errmsg(_handle);
+            } else if (insert.step() != SQLITE_DONE) {
+                error = sqlite3_errmsg(_handle);
+            }
         }
 
-        _statement_care_insert.bind(1, action.specimen_id);
-        _statement_care_insert.bind(2, static_cast<int64_t>(action.type));
-        if (_statement_care_insert.step() != SQLITE_DONE) {
-            return fail(sqlite3_errmsg(_handle));
+        if (!error.empty()) {
+            return fail(std::move(error));
         }
-
-        _statement_care_insert.reset();
     } else if (action.kind == K::Delete) {
-        static constexpr const char* sql = "DELETE FROM care_need WHERE id=? AND specimen_id=?";
-        if (!_statement_care_remove.prepare(_handle, sql)) {
-            return fail(sqlite3_errmsg(_handle));
+        int changes = 0;
+        {
+            Query remove;
+            static constexpr const char* sql = "DELETE FROM care_need WHERE id=? AND specimen_id=?";
+            if (!remove.prepare(_handle, sql) || !remove.bind(1, action.id) || !remove.bind(2, action.specimen_id)) {
+                error = sqlite3_errmsg(_handle);
+            } else if (remove.step() != SQLITE_DONE) {
+                error = sqlite3_errmsg(_handle);
+            } else {
+                changes = sqlite3_changes(_handle);
+            }
         }
 
-        _statement_care_remove.bind(1, action.id);
-        _statement_care_remove.bind(2, action.specimen_id);
-        if (_statement_care_remove.step() != SQLITE_DONE) {
-            return fail(sqlite3_errmsg(_handle));
+        if (!error.empty()) {
+            return fail(std::move(error));
         }
 
-        if (sqlite3_changes(_handle) != 1) {
+        if (changes != 1) {
             return fail("Care need unavailable", mv::MainverteError::Code::NotFound);
         }
     }
 
-    static constexpr const char* sql = "SELECT id,specimen_id,type"
-                                       " FROM care_need"
-                                       " WHERE specimen_id=?1 AND (?2=0 OR id=?2)"
-                                       " ORDER BY id";
-    if (!_statement_care_select.prepare(_handle, sql)) {
-        return fail(sqlite3_errmsg(_handle));
-    }
-
-    _statement_care_select.bind(1, action.specimen_id);
-    _statement_care_select.bind(2, action.kind == K::Get ? action.id : 0);
-
     std::vector<mv::CareNeed> result;
+    {
+        Query select;
+        static constexpr const char* sql = "SELECT id,specimen_id,type"
+                                           " FROM care_need"
+                                           " WHERE specimen_id=?1 AND (?2=0 OR id=?2)"
+                                           " ORDER BY id";
+        if (!select.prepare(_handle, sql) || !select.bind(1, action.specimen_id)
+            || !select.bind(2, action.kind == K::Get ? action.id : 0)) {
+            error = sqlite3_errmsg(_handle);
+        } else {
+            int rc;
+            while ((rc = select.step()) == SQLITE_ROW) {
+                result.emplace_back(
+                    select.column<int64_t>(0).value(),
+                    select.column<int64_t>(1).value(),
+                    select.column<mv::NeedType>(2).value()
+                );
+            }
 
-    int rc;
-    while ((rc = _statement_care_select.step()) == SQLITE_ROW) {
-        result.emplace_back(
-            _statement_care_select.column<int64_t>(0).value(),
-            _statement_care_select.column<int64_t>(1).value(),
-            _statement_care_select.column<mv::NeedType>(2).value()
-        );
+            if (rc != SQLITE_DONE) {
+                error = sqlite3_errmsg(_handle);
+            }
+        }
     }
 
-    if (rc != SQLITE_DONE) {
-        return fail(sqlite3_errmsg(_handle));
+    if (!error.empty()) {
+        return fail(std::move(error));
     }
 
     if (action.kind == K::Get && (action.id <= 0 || result.empty())) {

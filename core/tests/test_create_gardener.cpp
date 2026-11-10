@@ -759,3 +759,164 @@ TEST_CASE("Plant queries own text and preserve nullable metadata across repeated
     CHECK_FALSE(state->specimens.front().archived);
     CHECK_FALSE(state->specimens.front().archived_at);
 }
+
+namespace {
+
+struct CareFixture {
+    // Declared first so the database is closed before its directory is removed.
+    struct Directory {
+        std::filesystem::path path = std::filesystem::temp_directory_path() / std::format(
+            "mainverte-care-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+        ~Directory() {
+            std::error_code error;
+            std::filesystem::remove_all(path, error);
+        }
+    } directory;
+    mv::Services services;
+
+    CareFixture() {
+        REQUIRE(services.initialize((directory.path / "test.db").string()));
+        bool created = false;
+        REQUIRE(mv::complete_setup("Gardener", "fr", [&](mv::GardenerResult r) { created = r.has_value(); }, "My Plants"));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(created);
+    }
+
+    mv::Plants plants(mv::PlantAction action) {
+        std::optional<mv::PlantsResult> result;
+        REQUIRE(mv::manage_plants(std::move(action), "My Plants", [&](mv::PlantsResult r) { result = std::move(r); }));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(result.has_value());
+        REQUIRE(result->has_value());
+        return std::move(**result);
+    }
+
+    mv::CareResult care(mv::CareAction action) {
+        std::optional<mv::CareResult> result;
+        REQUIRE(mv::manage_care(action, [&](mv::CareResult r) { result = std::move(r); }));
+        REQUIRE(execute_on_worker("SELECT 1") == SQLITE_OK);
+        deliver_completions();
+        REQUIRE(result.has_value());
+        return std::move(*result);
+    }
+
+    mv::id_t create_specimen(const char* name) {
+        using K = mv::PlantAction::Kind;
+        return plants({.kind = K::CreateSpecimen, .id = mv::settings().current_collection_id, .name = name}).specimens.front().id;
+    }
+};
+
+}  //  namespace
+
+TEST_CASE("care needs belong to their own specimen across repeated operations") {
+    CareFixture fixture;
+    using C = mv::CareAction::Kind;
+    const auto alpha = fixture.create_specimen("Alpha");
+    const auto beta = fixture.create_specimen("Beta");
+
+    auto added_alpha = fixture.care({.kind = C::Add, .specimen_id = alpha, .type = mv::NeedType::Watering});
+    REQUIRE(added_alpha);
+    REQUIRE(added_alpha->size() == 1);
+    const auto alpha_need = added_alpha->front().id;
+
+    auto added_beta = fixture.care({.kind = C::Add, .specimen_id = beta, .type = mv::NeedType::Light});
+    REQUIRE(added_beta);
+    REQUIRE(added_beta->size() == 1);
+    CHECK(added_beta->front().specimen_id == beta);
+    const auto beta_light = added_beta->front().id;
+
+    auto list_alpha = fixture.care({.kind = C::List, .specimen_id = alpha});
+    REQUIRE(list_alpha);
+    REQUIRE(list_alpha->size() == 1);
+    CHECK(list_alpha->front().specimen_id == alpha);
+    CHECK(list_alpha->front().type == mv::NeedType::Watering);
+
+    auto list_beta = fixture.care({.kind = C::List, .specimen_id = beta});
+    REQUIRE(list_beta);
+    REQUIRE(list_beta->size() == 1);
+    CHECK(list_beta->front().specimen_id == beta);
+    CHECK(list_beta->front().type == mv::NeedType::Light);
+
+    // Repeated types are allowed per specimen, and each delete targets only its own need.
+    auto duplicate = fixture.care({.kind = C::Add, .specimen_id = beta, .type = mv::NeedType::Watering});
+    REQUIRE(duplicate);
+    REQUIRE(duplicate->size() == 2);
+    const auto beta_watering = duplicate->back().id;
+
+    auto removed_alpha = fixture.care({.kind = C::Delete, .specimen_id = alpha, .id = alpha_need});
+    REQUIRE(removed_alpha);
+    CHECK(removed_alpha->empty());
+
+    auto removed_beta = fixture.care({.kind = C::Delete, .specimen_id = beta, .id = beta_watering});
+    REQUIRE(removed_beta);
+    REQUIRE(removed_beta->size() == 1);
+    CHECK(removed_beta->front().id == beta_light);
+
+    auto got = fixture.care({.kind = C::Get, .specimen_id = beta, .id = beta_light});
+    REQUIRE(got);
+    REQUIRE(got->size() == 1);
+    CHECK(got->front().type == mv::NeedType::Light);
+
+    // A need can be read only through the specimen it belongs to.
+    auto foreign = fixture.care({.kind = C::Get, .specimen_id = alpha, .id = beta_light});
+    REQUIRE_FALSE(foreign);
+    CHECK(foreign.error().code == mv::MainverteError::Code::NotFound);
+}
+
+TEST_CASE("refused and failed care operations leave later operations usable") {
+    CareFixture fixture;
+    using C = mv::CareAction::Kind;
+    const auto alpha = fixture.create_specimen("Alpha");
+
+    auto missing = fixture.care({.kind = C::Delete, .specimen_id = alpha, .id = 9999});
+    REQUIRE_FALSE(missing);
+    CHECK(missing.error().code == mv::MainverteError::Code::NotFound);
+
+    auto listed = fixture.care({.kind = C::List, .specimen_id = alpha});
+    REQUIRE(listed);
+    CHECK(listed->empty());
+
+    REQUIRE(execute_on_worker(
+        "CREATE TRIGGER block_humidity BEFORE INSERT ON care_need WHEN NEW.type=6 "
+        "BEGIN SELECT RAISE(ABORT, 'blocked'); END;") == SQLITE_OK);
+    auto blocked = fixture.care({.kind = C::Add, .specimen_id = alpha, .type = mv::NeedType::Humidity});
+    REQUIRE_FALSE(blocked);
+    CHECK(blocked.error().code == mv::MainverteError::Code::Database);
+    REQUIRE(execute_on_worker("DROP TRIGGER block_humidity") == SQLITE_OK);
+
+    // A different type exposes any values left over from the refused insert.
+    auto recovered = fixture.care({.kind = C::Add, .specimen_id = alpha, .type = mv::NeedType::Light});
+    REQUIRE(recovered);
+    REQUIRE(recovered->size() == 1);
+    CHECK(recovered->front().type == mv::NeedType::Light);
+}
+
+TEST_CASE("care operations are limited to specimens of the current gardener") {
+    CareFixture fixture;
+    using C = mv::CareAction::Kind;
+    fixture.create_specimen("Alpha");
+    REQUIRE(execute_on_worker(
+        "INSERT INTO gardener VALUES(999,'Other',1);"
+        "INSERT INTO collection VALUES(999,999,'Private',1,1);"
+        "INSERT INTO specimen(id,collection_id,display_name,created_at,modified_at) VALUES(999,999,'Private plant',1,1);"
+        "INSERT INTO care_need(id,specimen_id,type) VALUES(900,999,0);") == SQLITE_OK);
+
+    auto listed = fixture.care({.kind = C::List, .specimen_id = 999});
+    REQUIRE_FALSE(listed);
+    CHECK(listed.error().code == mv::MainverteError::Code::NotFound);
+
+    auto added = fixture.care({.kind = C::Add, .specimen_id = 999, .type = mv::NeedType::Light});
+    REQUIRE_FALSE(added);
+    CHECK(added.error().code == mv::MainverteError::Code::NotFound);
+
+    auto removed = fixture.care({.kind = C::Delete, .specimen_id = 999, .id = 900});
+    REQUIRE_FALSE(removed);
+    CHECK(removed.error().code == mv::MainverteError::Code::NotFound);
+
+    REQUIRE(execute_on_worker(
+        "CREATE TEMP TABLE verify_scope(value INTEGER CHECK(value=1));"
+        "INSERT INTO verify_scope SELECT count(*)=1 FROM care_need WHERE id=900 AND specimen_id=999 AND type=0;"
+        "INSERT INTO verify_scope SELECT count(*)=1 FROM care_need WHERE specimen_id=999;") == SQLITE_OK);
+}
