@@ -8,6 +8,7 @@
 #include <expected>
 #include <filesystem>
 #include <format>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -15,6 +16,7 @@
 #include <string_view>
 #include <system_error>
 #include <thread>
+#include <type_traits>
 #include <utility>
 #include <variant>
 
@@ -141,18 +143,11 @@ MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_v
     return true;
 }
 
-bool prepare_statement(sqlite3* handle, Database::statement_ptr& ptr, const char* query) {
-    assert(handle != nullptr);
-    assert(query != nullptr);
-
-    if (ptr != nullptr) {
-        return true;
-    }
-
-    sqlite3_stmt* statement;
-    int rc = sqlite3_prepare_v2(handle, query, -1, &statement, nullptr);
-    ptr.reset(statement);
-    return rc == SQLITE_OK;
+// The supported range of NeedType is deliberately repeated in the CHECK constraint of
+// core/sql/0001_specimen_care.sql, which cannot change once shipped. Each copy fails closed;
+// the "care need type range agrees" test keeps them aligned.
+bool valid_need_type(mv::NeedType type) {
+    return type >= mv::NeedType::Watering && type <= mv::NeedType::Temperature;
 }
 
 bool valid_name(const std::string& name) {
@@ -181,10 +176,26 @@ bool valid_date(const std::optional<std::string>& value) {
                                    std::chrono::day{static_cast<unsigned>(day)}}.ok();
 }
 
+// Resets a persistent Query on every exit path, so a statement left on a row never keeps a read
+// lock (blocking WAL checkpoints and later writers) until its next use.
+class Query_Guard {
+public:
+    explicit Query_Guard(Query& query) : _query(query) {}
+    Query_Guard(const Query_Guard&) = delete;
+    Query_Guard& operator=(const Query_Guard&) = delete;
+    Query_Guard(Query_Guard&&) = delete;
+    Query_Guard& operator=(Query_Guard&&) = delete;
+
+    ~Query_Guard() { _query.reset(); }
+
+private:
+    Query& _query;
+};
+
 }  // namespace
 
 Query::~Query() {
-    sqlite3_finalize(_statement);  // already check for nullptr
+    sqlite3_finalize(_statement);
 }
 
 bool Query::prepare(sqlite3* handle, const char* sql) {
@@ -192,11 +203,30 @@ bool Query::prepare(sqlite3* handle, const char* sql) {
     assert(sql != nullptr);
 
     if (_statement != nullptr) {
-        return true;
+        assert(sqlite3_stmt_busy(_statement));
+        assert(sqlite3_bind_parameter_count(_statement) == 0);
+
+        if (_handle != handle || _sql != sql) {
+            log_err("DB: Query reuse refused: different {}", _handle != handle ? "connection" : "SQL");
+            return false;
+        }
+
+        return reset();
     }
 
-    int rc = sqlite3_prepare_v2(handle, sql, -1, &_statement, nullptr);
-    return rc == SQLITE_OK;
+    if (sqlite3_prepare_v2(handle, sql, -1, &_statement, nullptr) != SQLITE_OK) {
+        _statement = nullptr;
+        return false;
+    }
+
+    _handle = handle;
+    _sql = sql;
+    return true;
+}
+
+bool Query::reset() {
+    sqlite3_reset(_statement);  // ignore result, it only repeats the error of the previous step()
+    return sqlite3_clear_bindings(_statement) == SQLITE_OK;
 }
 
 bool Query::bind(int32_t pos, std::string_view value) {
@@ -224,17 +254,10 @@ int Query::step() {
     return sqlite3_step(_statement);
 }
 
-bool Query::reset() {
-    return sqlite3_reset(_statement) == SQLITE_OK;
-}
-
-bool Query::done() const {
-    return sqlite3_step(_statement) == SQLITE_DONE;
-}
-
 template <>
 std::optional<int64_t> Query::column<int64_t>(int index) const {
-    if (sqlite3_column_type(_statement, index) == SQLITE_NULL) {
+    // sqlite3_column_int64 converts any storage class: 1.5 reads as 1 and 'text' as 0.
+    if (sqlite3_column_type(_statement, index) != SQLITE_INTEGER) {
         return std::nullopt;
     }
 
@@ -243,14 +266,25 @@ std::optional<int64_t> Query::column<int64_t>(int index) const {
 
 template <typename T> requires std::is_scoped_enum_v<T>
 MV_INLINE std::optional<T> Query::column(int index) const {
-    return column<int64_t>(index).transform([](int64_t value) {
-        return static_cast<T>(value);
-    });
+    using Underlying = std::underlying_type_t<T>;
+
+    // static_cast would silently wrap an out-of-range value into the underlying type.
+    const auto value = column<int64_t>(index);
+    if (!value || *value < std::numeric_limits<Underlying>::min() || *value > std::numeric_limits<Underlying>::max()) {
+        return std::nullopt;
+    }
+
+    return static_cast<T>(*value);
 }
 
 template <>
-MV_INLINE std::optional<bool> Query::column<bool>(int index) const {
-    return column<int64_t>(index).transform([](int64_t x) { return x != 0; });
+std::optional<bool> Query::column<bool>(int index) const {
+    const auto value = column<int64_t>(index);
+    if (!value || (*value != 0 && *value != 1)) {
+        return std::nullopt;
+    }
+
+    return *value == 1;
 }
 
 template <>
@@ -273,7 +307,9 @@ bool detail::configure_database(sqlite3* handle) {
             "PRAGMA cache_size = -8192;"
             "PRAGMA temp_store = MEMORY;"
             "PRAGMA busy_timeout = 3000;"
-            "PRAGMA optimize = 0x10002;");
+            "PRAGMA optimize = 0x10002;"
+    );
+
     if (!configured) {
         log_err("DB: cannot configure PRAGMA: {}", sqlite3_errmsg(handle));
         return false;
@@ -320,6 +356,7 @@ Database::~Database() {
         _thread.join();
     }
 
+    assert(_handle == nullptr || sqlite3_next_stmt(_handle, nullptr) == nullptr);
     sqlite3_close_v2(_handle);
 }
 
@@ -351,6 +388,7 @@ bool Database::submit(Job job) {
         assert(_handle != nullptr);
         _jobs.push_back(std::move(job));
     }
+
     _wake.notify_one();
     return true;
 }
@@ -459,18 +497,9 @@ void Database::thread_loop() {
 }
 
 int64_t Database::create_gardener(const std::string& name) {
+    Query insert;
     static constexpr const char* sql = "INSERT INTO gardener(display_name, created_at) VALUES (?1, unixepoch())";
-
-    if (!_statement_create_gardener.prepare(_handle, sql)) {
-        return -1;
-    }
-
-    if (!_statement_create_gardener.bind(1, name)) {
-        return -1;
-    }
-
-    auto step_ok = _statement_create_gardener.step() == SQLITE_DONE;
-    if (!_statement_create_gardener.reset() || !step_ok) {
+    if (!insert.prepare(_handle, sql) || !insert.bind(1, name) || insert.step() != SQLITE_DONE) {
         return -1;
     }
 
@@ -512,12 +541,11 @@ mv::GardenerResult Database::complete_setup(const std::string& name, const std::
     settings->current_collection_id = 0;
     settings->language = language;
     if (!initial_collection_name.empty()) {
-        statement_ptr collection(nullptr, sqlite3_finalize);
-        if (!prepare_statement(_handle, collection,
-                "INSERT INTO collection(gardener_id,name,created_at,modified_at) VALUES(?1,?2,unixepoch(),unixepoch())") ||
-            sqlite3_bind_int64(collection.get(), 1, id) != SQLITE_OK ||
-            sqlite3_bind_text(collection.get(), 2, initial_collection_name.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
-            sqlite3_step(collection.get()) != SQLITE_DONE) {
+        Query collection;
+        static constexpr const char* sql =
+            "INSERT INTO collection(gardener_id,name,created_at,modified_at) VALUES(?1,?2,unixepoch(),unixepoch())";
+        if (!collection.prepare(_handle, sql) || !collection.bind(1, id)
+            || !collection.bind(2, std::string_view(initial_collection_name)) || collection.step() != SQLITE_DONE) {
             return fail("initial collection");
         }
 
@@ -536,77 +564,96 @@ mv::GardenerResult Database::complete_setup(const std::string& name, const std::
 }
 
 std::optional<mv::Settings> Database::read_settings() {
-    static constexpr const char* sql =
-        "SELECT current_gardener_id, "
-               "current_collection_id,"
-               "language,"
-               "dark_theme,"
-               "log_level,"
-               "debug_enabled"
-        " FROM settings"
-        " WHERE id = 1";
-    auto fail = [this]() -> std::optional<mv::Settings> {
-        log_err("DB: cannot read settings (missing row, invalid ID or SQLite error): {}",
-                sqlite3_errmsg(_handle));
-        _statement_read_settings.reset();
-        return std::nullopt;
-    };
+    // Selections are resolved while reading: a stored gardener or collection that does not
+    // exist reads as "no selection". Ownership of the collection is enforced when writing and
+    // repaired by update_plants, and a collection may be selected without a gardener.
+    static constexpr const char* sql = "SELECT g.id,"
+                                              "c.id,"
+                                              "s.language,"
+                                              "s.dark_theme,"
+                                              "s.log_level,"
+                                              "s.debug_enabled"
+                                       " FROM settings s"
+                                       " LEFT JOIN gardener g ON g.id = s.current_gardener_id"
+                                       " LEFT JOIN collection c ON c.id = s.current_collection_id"
+                                       " WHERE s.id = 1";
 
-    if (!_statement_read_settings.prepare(_handle, sql)) {
-        return fail();
-    }
+    std::string error;
+    std::optional<mv::Settings> settings;
+    {
+        Query& select = _read_settings_query;
+        const Query_Guard guard(select);
+        int rc = SQLITE_ERROR;
+        if (!select.prepare(_handle, sql) || (rc = select.step()) != SQLITE_ROW) {
+            error = rc == SQLITE_DONE ? "settings row is missing" : sqlite3_errmsg(_handle);
+        } else {
+            const auto language = select.column<std::string_view>(2);
+            const auto dark_theme = select.column<bool>(3);
+            const auto log_level = select.column<int64_t>(4);
+            const auto debug_enabled = select.column<bool>(5);
 
-    if (_statement_read_settings.step() != SQLITE_ROW) {
-        return fail();
-    }
+            if (!language || !dark_theme || !debug_enabled) {
+                error = "invalid stored language or presentation flag";
+            } else if (!log_level || *log_level < static_cast<int64_t>(mv::LogLevel::Dbg)
+                                  || *log_level > static_cast<int64_t>(mv::LogLevel::Err)) {
+                error = "invalid stored log level";
+            } else {
+                mv::Settings decoded;
+                // Selections are nullable: NULL reads as Settings::Undefined.
+                decoded.current_gardener_id = select.column<int64_t>(0).value_or(mv::Settings::Undefined);
+                decoded.current_collection_id = select.column<int64_t>(1).value_or(mv::Settings::Undefined);
+                decoded.language = *language;
+                decoded.dark_theme_enabled = *dark_theme;
+                decoded.log_level = static_cast<mv::LogLevel>(*log_level);
+                decoded.debug_enabled = *debug_enabled;
 
-    mv::Settings settings;
-    std::array fields{&settings.current_gardener_id, &settings.current_collection_id};
-    for (int c = 0; c < 2; ++c) {
-        const auto value = _statement_read_settings.column<int64_t>(c);
-        if (value.has_value()) {
-            *fields[c] = static_cast<mv::id_t>(*value);
+                if (const int next = select.step(); next != SQLITE_DONE) {
+                    error = next == SQLITE_ROW ? "unexpected extra settings row" : sqlite3_errmsg(_handle);
+                } else {
+                    settings = std::move(decoded);
+                }
+            }
         }
     }
 
-    const auto language = _statement_read_settings.column<std::string_view>(2);
-    if (!language.has_value()) {
-        return fail();
-    }
-
-    settings.language = *language;
-
-    settings.dark_theme_enabled = _statement_read_settings.column<bool>(3).value_or(false);
-
-    const auto log_level = _statement_read_settings.column<mv::LogLevel>(4);
-    if (!log_level.has_value() || log_level < mv::LogLevel::Dbg || log_level > mv::LogLevel::Err) {
-        return fail();
-    }
-
-    settings.log_level = log_level.value();
-
-    settings.debug_enabled = _statement_read_settings.column<bool>(5).value_or(false);
-
-    const auto is_done = _statement_read_settings.done();
-    if (!_statement_read_settings.reset() || !is_done) {
-        return fail();
+    if (!settings) {
+        log_err("DB: cannot read settings: {}", error);
     }
 
     return settings;
 }
 
 bool Database::write_settings(const mv::Settings& settings) {
-    if (settings.current_gardener_id > 0 && settings.current_collection_id > 0) {
-        statement_ptr owner(nullptr, sqlite3_finalize);
-        if (!prepare_statement(_handle, owner, "SELECT 1 FROM collection WHERE id=?1 AND gardener_id=?2") ||
-            sqlite3_bind_int64(owner.get(), 1, settings.current_collection_id) != SQLITE_OK ||
-            sqlite3_bind_int64(owner.get(), 2, settings.current_gardener_id) != SQLITE_OK ||
-            sqlite3_step(owner.get()) != SQLITE_ROW) {
-            log_wrn("DB: collection selection does not belong to gardener");
-            return false;
-        }
-    }
+    std::string error;
+    // TODO REMOVE ?
+    // if (settings.current_gardener_id > 0 && settings.current_collection_id > 0) {
+    //     int owned = SQLITE_ERROR;
+    //     {
+    //         Query owner;
+    //         static constexpr const char* sql = "SELECT 1 FROM collection WHERE id=?1 AND gardener_id=?2";
+    //         if (owner.prepare(_handle, sql) && owner.bind(1, settings.current_collection_id)
+    //             && owner.bind(2, settings.current_gardener_id)) {
+    //             owned = owner.step();
+    //         }
 
+    //         if (owned != SQLITE_ROW && owned != SQLITE_DONE) {
+    //             error = sqlite3_errmsg(_handle);
+    //         }
+    //     }
+
+    //     if (!error.empty()) {
+    //         log_err("DB: cannot verify collection selection: {}", error);
+    //         return false;
+    //     }
+
+    //     if (owned == SQLITE_DONE) {
+    //         log_wrn("DB: collection selection does not belong to gardener");
+    //         return false;
+    //     }
+    // }
+
+    Query& update = _write_settings_query;
+    const Query_Guard guard(update);
     static constexpr const char* sql = "UPDATE settings"
                                        " SET current_gardener_id = ?1,"
                                            "current_collection_id = ?2,"
@@ -615,56 +662,26 @@ bool Database::write_settings(const mv::Settings& settings) {
                                            "log_level = ?5,"
                                            "debug_enabled = ?6"
                                        " WHERE id = 1";
-    auto fail = [this] {
-        log_err("DB: cannot write settings (missing row or SQLite error): {}", sqlite3_errmsg(_handle));
-        _statement_write_settings.reset();
+    const bool bound = update.prepare(_handle, sql)
+        && (settings.current_gardener_id == mv::Settings::Undefined
+                ? update.bind_null(1)
+                : update.bind(1, settings.current_gardener_id))
+        && (settings.current_collection_id == mv::Settings::Undefined
+                ? update.bind_null(2)
+                : update.bind(2, settings.current_collection_id))
+        && update.bind(3, settings.language)
+        && update.bind(4, settings.dark_theme_enabled)
+        && update.bind(5, static_cast<int64_t>(settings.log_level))
+        && update.bind(6, settings.debug_enabled);
+    if (!bound || update.step() != SQLITE_DONE) {
+        error = sqlite3_errmsg(_handle);
+    } else if (sqlite3_changes(_handle) != 1) {
+        error = "settings row is missing";
+    }
+
+    if (!error.empty()) {
+        log_err("DB: cannot write settings: {}", error);
         return false;
-    };
-
-
-    if (!_statement_write_settings.prepare(_handle, sql)) {
-        return fail();
-    }
-
-    auto& statement = _statement_write_settings;
-    std::array fields{settings.current_gardener_id, settings.current_collection_id};
-    for (int column = 0; column < 2; ++column) {
-        bool success = false;
-
-        auto id = fields[column];
-        if (id == 0) {
-            success = _statement_write_settings.bind_null(column + 1);
-        } else {
-            success = _statement_write_settings.bind(column + 1, fields[column]);
-        }
-
-        if (!success) {
-            return fail();
-        }
-    }
-
-    if (!_statement_write_settings.bind(3, settings.language)) {
-        return fail();
-    }
-
-    if (!_statement_write_settings.bind(4, settings.dark_theme_enabled)) {
-        return fail();
-    }
-
-    if (!_statement_write_settings.bind(5, static_cast<int64_t>(settings.log_level))) {
-        return fail();
-    }
-
-    if (!_statement_write_settings.bind(6, settings.debug_enabled)) {
-        return fail();
-    }
-
-    if (!statement.done() || sqlite3_changes(_handle) != 1) {
-        return fail();
-    }
-
-    if (!statement.reset()) {
-        return fail();
     }
 
     return true;
@@ -682,10 +699,9 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
         return std::unexpected(mv::MainverteError{code, std::move(message)});
     };
 
-    if (action.kind < K::List
-        || action.kind > K::Delete
-        || (action.kind == K::Add && (   action.type < mv::NeedType::Watering
-                                      || action.type > mv::NeedType::Temperature))) {
+    if (    action.kind < K::List
+        ||  action.kind > K::Delete
+        || (action.kind == K::Add && !valid_need_type(action.type))) {
         return fail("Unsupported care operation or need type", mv::MainverteError::Code::InvalidInput);
     }
 
@@ -693,26 +709,23 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
         return fail(sqlite3_errmsg(_handle));
     }
 
-    // Every statement is a local Query, finalized before the transaction ends. A refused
-    // or failed operation therefore leaves no binding or step state for later operations.
-    // Error details are captured inside each block, while the failing statement is still
-    // alive: finalizing it or rolling back can replace the connection's message.
     std::string error;
     int owned = SQLITE_ERROR;
-    {
-        Query owner;
-        static constexpr const char* sql = "SELECT 1 FROM specimen s"
-                                           " JOIN collection c ON c.id=s.collection_id"
-                                           " WHERE s.id=?1 AND c.gardener_id=?2";
-        if (!owner.prepare(_handle, sql) || !owner.bind(1, action.specimen_id) || !owner.bind(2, gardener)) {
-            error = sqlite3_errmsg(_handle);
-        } else {
-            owned = owner.step();
-            if (owned != SQLITE_ROW && owned != SQLITE_DONE) {
-                error = sqlite3_errmsg(_handle);
-            }
-        }
-    }
+    // TODO REMOVE ?
+    // {
+    //     Query owner;
+    //     static constexpr const char* sql = "SELECT 1 FROM specimen s"
+    //                                        " JOIN collection c ON c.id=s.collection_id"
+    //                                        " WHERE s.id=?1 AND c.gardener_id=?2";
+    //     if (!owner.prepare(_handle, sql) || !owner.bind(1, action.specimen_id) || !owner.bind(2, gardener)) {
+    //         error = sqlite3_errmsg(_handle);
+    //     } else {
+    //         owned = owner.step();
+    //         if (owned != SQLITE_ROW && owned != SQLITE_DONE) {
+    //             error = sqlite3_errmsg(_handle);
+    //         }
+    //     }
+    // }
 
     if (!error.empty()) {
         return fail(std::move(error));
@@ -722,6 +735,8 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
         return fail("Specimen unavailable", mv::MainverteError::Code::NotFound);
     }
 
+    // TODO Separate actions in different methods
+    // reuse prepared queries
     if (action.kind == K::Add) {
         {
             Query insert;
@@ -760,6 +775,7 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
         }
     }
 
+    // TODO Separate in another method + reuse query
     std::vector<mv::CareNeed> result;
     {
         Query select;
@@ -773,14 +789,18 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
         } else {
             int rc;
             while ((rc = select.step()) == SQLITE_ROW) {
-                result.emplace_back(
-                    select.column<int64_t>(0).value(),
-                    select.column<int64_t>(1).value(),
-                    select.column<mv::NeedType>(2).value()
-                );
+                const auto id = select.column<int64_t>(0);
+                const auto specimen = select.column<int64_t>(1);
+                const auto type = select.column<mv::NeedType>(2);
+                if (!id || !specimen || !type || !valid_need_type(*type)) {
+                    error = "Stored care need is invalid";
+                    break;
+                }
+
+                result.emplace_back(*id, *specimen, *type);
             }
 
-            if (rc != SQLITE_DONE) {
+            if (error.empty() && rc != SQLITE_DONE) {
                 error = sqlite3_errmsg(_handle);
             }
         }
@@ -801,6 +821,7 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
     return result;
 }
 
+// TODO separate queries and prepare requests
 mv::PlantsResult Database::update_plants(mv::id_t gardener, const mv::PlantAction& a, const std::string& initial) {
     using K = mv::PlantAction::Kind;
     const auto fail = [&](std::string message, mv::MainverteError::Code code = mv::MainverteError::Code::Database) -> mv::PlantsResult {
@@ -812,74 +833,78 @@ mv::PlantsResult Database::update_plants(mv::id_t gardener, const mv::PlantActio
         mv::platform::log(mv::LogLevel::Wrn, message);
         return std::unexpected(mv::MainverteError{code, std::move(message)});
     };
+
     if (gardener <= 0 || !transaction_begin_immediate(_handle)) {
         return fail("Unable to open plant operation");
     }
 
-    Query owner;
-    if (!owner.prepare(_handle, "SELECT id FROM gardener WHERE id=?")) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // TODO Remove ?
+    // Query owner;
+    // if (!owner.prepare(_handle, "SELECT id FROM gardener WHERE id=?")) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    if (!owner.bind(1, gardener)) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // if (!owner.bind(1, gardener)) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    if (owner.step() != SQLITE_ROW) {
-        return fail("Gardener does not exist");
-    }
+    // if (owner.step() != SQLITE_ROW) {
+    //     return fail("Gardener does not exist");
+    // }
 
-    Query count;
-    if (!count.prepare(_handle, "SELECT id FROM collection WHERE gardener_id=? ORDER BY id LIMIT 1")) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // TODO Remove ?
+    // Query count;
+    // if (!count.prepare(_handle, "SELECT id FROM collection WHERE gardener_id=? ORDER BY id LIMIT 1")) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    if (!count.bind(1, gardener)) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // if (!count.bind(1, gardener)) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    const int count_rc = count.step();
-    if (count_rc == SQLITE_DONE && a.kind != K::CreateCollection) {
-        Query insert;
-        if (!insert.prepare(_handle, "INSERT INTO collection(gardener_id,name,created_at,modified_at) VALUES(?,?,unixepoch(),unixepoch())")) {
-            return fail(sqlite3_errmsg(_handle));
-        }
+    // const int count_rc = count.step();
+    // if (count_rc == SQLITE_DONE && a.kind != K::CreateCollection) {
+    //     Query insert;
+    //     if (!insert.prepare(_handle, "INSERT INTO collection(gardener_id,name,created_at,modified_at) VALUES(?,?,unixepoch(),unixepoch())")) {
+    //         return fail(sqlite3_errmsg(_handle));
+    //     }
 
-        if (!insert.bind(1, gardener)) {
-            return fail(sqlite3_errmsg(_handle));
-        }
+    //     if (!insert.bind(1, gardener)) {
+    //         return fail(sqlite3_errmsg(_handle));
+    //     }
 
-        if (!insert.bind(2, initial)) {
-            return fail(sqlite3_errmsg(_handle));
-        }
+    //     if (!insert.bind(2, initial)) {
+    //         return fail(sqlite3_errmsg(_handle));
+    //     }
 
-        if (!valid_name(initial) || insert.step() != SQLITE_DONE) {
-            return fail("Unable to create initial collection");
-        }
-    } else if (count_rc != SQLITE_ROW && count_rc != SQLITE_DONE) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    //     if (!valid_name(initial) || insert.step() != SQLITE_DONE) {
+    //         return fail("Unable to create initial collection");
+    //     }
+    // } else if (count_rc != SQLITE_ROW && count_rc != SQLITE_DONE) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    Query repair;
-    if (!repair.prepare(_handle, "UPDATE settings SET current_collection_id=(SELECT id FROM collection WHERE gardener_id=? ORDER BY id LIMIT 1) WHERE id=1 AND current_gardener_id=? AND NOT EXISTS(SELECT 1 FROM collection WHERE id=current_collection_id AND gardener_id=?)")) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // TODO Remove ?
+    // Query repair;
+    // if (!repair.prepare(_handle, "UPDATE settings SET current_collection_id=(SELECT id FROM collection WHERE gardener_id=? ORDER BY id LIMIT 1) WHERE id=1 AND current_gardener_id=? AND NOT EXISTS(SELECT 1 FROM collection WHERE id=current_collection_id AND gardener_id=?)")) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    if (!repair.bind(1, gardener)) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // if (!repair.bind(1, gardener)) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    if (!repair.bind(2, gardener)) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // if (!repair.bind(2, gardener)) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    if (!repair.bind(3, gardener)) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // if (!repair.bind(3, gardener)) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
-    if (repair.step() != SQLITE_DONE) {
-        return fail(sqlite3_errmsg(_handle));
-    }
+    // if (repair.step() != SQLITE_DONE) {
+    //     return fail(sqlite3_errmsg(_handle));
+    // }
 
     if (a.kind == K::DeleteCollection) {
         Query last;

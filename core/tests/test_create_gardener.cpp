@@ -920,3 +920,65 @@ TEST_CASE("care operations are limited to specimens of the current gardener") {
         "INSERT INTO verify_scope SELECT count(*)=1 FROM care_need WHERE id=900 AND specimen_id=999 AND type=0;"
         "INSERT INTO verify_scope SELECT count(*)=1 FROM care_need WHERE specimen_id=999;") == SQLITE_OK);
 }
+
+TEST_CASE("care listing rejects stored need types outside the supported range and stays usable") {
+    CareFixture fixture;
+    using C = mv::CareAction::Kind;
+    const auto specimen = fixture.create_specimen("Alpha");
+    REQUIRE(fixture.care({.kind = C::Add, .specimen_id = specimen, .type = mv::NeedType::Watering}));
+
+    // 8 is the first unsupported value, -1 fits the enum's storage type, and 256 would wrap to
+    // Watering if it were narrowed to that type. The schema refuses all three; bypass it to
+    // check that Core does not trust stored data blindly.
+    for (const int stored : {8, -1, 256}) {
+        CAPTURE(stored);
+        REQUIRE(execute_on_worker(std::format(
+            "PRAGMA ignore_check_constraints=ON;"
+            "INSERT INTO care_need(id,specimen_id,type) VALUES(900,{},{});"
+            "PRAGMA ignore_check_constraints=OFF;", specimen, stored).c_str()) == SQLITE_OK);
+        const auto listed = fixture.care({.kind = C::List, .specimen_id = specimen});
+        REQUIRE_FALSE(listed);
+        CHECK(listed.error().code == mv::MainverteError::Code::Database);
+        REQUIRE(execute_on_worker("DELETE FROM care_need WHERE id=900") == SQLITE_OK);
+
+        const auto recovered = fixture.care({.kind = C::List, .specimen_id = specimen});
+        REQUIRE(recovered);
+        CHECK(recovered->size() == 1);
+    }
+}
+
+// The supported range of NeedType is written in three places on purpose: the enum, the CHECK
+// constraint of core/sql/0001_specimen_care.sql (immutable once shipped) and the Core validation
+// of Database::update_care. Each guards a different boundary and each fails closed. This test
+// ties them together: extending NeedType means a new migration, an update of the Core
+// validation and an update of this test.
+TEST_CASE("care need type range agrees across the enum, Core validation and the schema") {
+    CareFixture fixture;
+    using C = mv::CareAction::Kind;
+    constexpr int first = static_cast<int>(mv::NeedType::Watering);
+    constexpr int last = static_cast<int>(mv::NeedType::Temperature);
+    const auto specimen = fixture.create_specimen("Alpha");
+
+    for (int type = first; type <= last; ++type) {
+        CAPTURE(type);
+        const auto added = fixture.care({.kind = C::Add, .specimen_id = specimen, .type = static_cast<mv::NeedType>(type)});
+        REQUIRE(added);
+        CHECK(added->back().type == static_cast<mv::NeedType>(type));
+    }
+
+    for (const int type : {first - 1, last + 1}) {
+        CAPTURE(type);
+        const auto refused = fixture.care({.kind = C::Add, .specimen_id = specimen, .type = static_cast<mv::NeedType>(type)});
+        REQUIRE_FALSE(refused);
+        CHECK(refused.error().code == mv::MainverteError::Code::InvalidInput);
+
+        // The connection reports extended result codes; compare the primary code.
+        const auto direct = execute_on_worker(std::format(
+            "INSERT INTO care_need(specimen_id,type) VALUES({},{})", specimen, type).c_str());
+        CHECK((direct & 0xff) == SQLITE_CONSTRAINT);
+    }
+
+    const auto all = fixture.care({.kind = C::List, .specimen_id = specimen});
+    REQUIRE(all);
+    CHECK(all->size() == static_cast<size_t>(last - first + 1));
+}

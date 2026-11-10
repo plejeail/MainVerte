@@ -23,7 +23,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
-#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -42,11 +41,14 @@ struct sqlite3_stmt;
 
 class Query {
 public:
-    using query_variant_t = std::variant<std::monostate, int32_t, int64_t, double, std::string_view>;
-
+    Query() = default;
+    Query(const Query&) = delete;
+    Query& operator=(const Query&) = delete;
     ~Query();
 
     bool prepare(sqlite3* handle, const char* sql);
+    bool reset();
+    void finalize();
 
     bool bind(int32_t pos, std::string_view value);
     bool bind(int32_t pos, double value);
@@ -55,9 +57,6 @@ public:
     bool bind_null(int32_t pos);
 
     int step();
-    bool reset();
-
-    [[nodiscard]] bool done() const;
 
     template <typename T>
     [[nodiscard]] std::optional<T> column(int index) const;
@@ -66,12 +65,15 @@ public:
 
 private:
     sqlite3_stmt* _statement = nullptr;
+    sqlite3*      _handle = nullptr;
 };
+
+template <> std::optional<int64_t> Query::column<int64_t>(int index) const;
+template <> std::optional<bool> Query::column<bool>(int index) const;
+template <> std::optional<std::string_view> Query::column<std::string_view>(int index) const;
 
 class Database {
 public:
-    using statement_ptr = std::unique_ptr<sqlite3_stmt, int(*)(sqlite3_stmt*)>;
-
     using Job = mv::MoveOnlyFunction<void(sqlite3*)>;
 
     enum class State : int8_t { Uninitialized, Initialized, Running, Stopping, };
@@ -102,15 +104,17 @@ private:
 
     template <size_t software_version> bool migrate_database(size_t current_version);
 
+    // Persistent statements for operations repeated on the worker. Prepared on first use on the
+    // connection in _handle and finalized by ~Database before that connection is closed.
+    Query           _read_settings_query;
+    Query           _write_settings_query;
+
     State           _state = State::Uninitialized;
     std::mutex      _mutex;
     std::condition_variable _wake;
     sqlite3*        _handle = nullptr;
     std::deque<Job> _jobs;
     std::thread     _thread;
-    Query           _statement_create_gardener;
-    Query           _statement_read_settings;
-    Query           _statement_write_settings;
 };
 
 namespace detail {
