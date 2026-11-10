@@ -143,6 +143,13 @@ MV_NOINLINE bool verify_pragma(sqlite3* handle, const char* query, std::string_v
     return true;
 }
 
+// The supported range of NeedType is deliberately repeated in the CHECK constraint of
+// core/sql/0001_specimen_care.sql, which cannot change once shipped. Each copy fails closed;
+// the "care need type range agrees" test keeps them aligned.
+bool valid_need_type(mv::NeedType type) {
+    return type >= mv::NeedType::Watering && type <= mv::NeedType::Temperature;
+}
+
 bool valid_name(const std::string& name) {
     return name.find('\0') == std::string::npos && name.find_first_not_of(" \t\r\n") != std::string::npos;
 }
@@ -654,8 +661,7 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
 
     if (action.kind < K::List
         || action.kind > K::Delete
-        || (action.kind == K::Add && (   action.type < mv::NeedType::Watering
-                                      || action.type > mv::NeedType::Temperature))) {
+        || (action.kind == K::Add && !valid_need_type(action.type))) {
         return fail("Unsupported care operation or need type", mv::MainverteError::Code::InvalidInput);
     }
 
@@ -743,14 +749,18 @@ mv::CareResult Database::update_care(mv::id_t gardener, const mv::CareAction& ac
         } else {
             int rc;
             while ((rc = select.step()) == SQLITE_ROW) {
-                result.emplace_back(
-                    select.column<int64_t>(0).value(),
-                    select.column<int64_t>(1).value(),
-                    select.column<mv::NeedType>(2).value()
-                );
+                const auto id = select.column<int64_t>(0);
+                const auto specimen = select.column<int64_t>(1);
+                const auto type = select.column<mv::NeedType>(2);
+                if (!id || !specimen || !type || !valid_need_type(*type)) {
+                    error = "Stored care need is invalid";
+                    break;
+                }
+
+                result.emplace_back(*id, *specimen, *type);
             }
 
-            if (rc != SQLITE_DONE) {
+            if (error.empty() && rc != SQLITE_DONE) {
                 error = sqlite3_errmsg(_handle);
             }
         }
