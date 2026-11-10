@@ -858,6 +858,11 @@ TEST_CASE("care needs belong to their own specimen across repeated operations") 
     REQUIRE(got);
     REQUIRE(got->size() == 1);
     CHECK(got->front().type == mv::NeedType::Light);
+
+    // A need can be read only through the specimen it belongs to.
+    auto foreign = fixture.care({.kind = C::Get, .specimen_id = alpha, .id = beta_light});
+    REQUIRE_FALSE(foreign);
+    CHECK(foreign.error().code == mv::MainverteError::Code::NotFound);
 }
 
 TEST_CASE("refused and failed care operations leave later operations usable") {
