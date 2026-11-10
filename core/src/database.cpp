@@ -213,7 +213,7 @@ bool Query::bind(int32_t pos, int64_t value) {
 }
 
 MV_INLINE bool Query::bind(int32_t pos, bool value) {
-    return bind(pos, value ? 1LL : 0LL);
+    return bind(pos, static_cast<int64_t>(value ? 1 : 0));
 }
 
 bool Query::bind_null(int32_t pos) {
